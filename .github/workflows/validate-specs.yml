@@ -1,0 +1,27 @@
+name: Validate Specifications
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - spec
+
+permissions:
+  contents: read
+
+jobs:
+  validate-specs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate specifications and skills
+        run: python tools/verify-specs.py
