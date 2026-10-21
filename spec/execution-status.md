@@ -23,7 +23,7 @@ A phase with failed or unverified mandatory criteria MUST NOT be marked COMPLETE
 
 3. Phase Overview
 Phase	Specification	Status	Evidence / PR	Approval
-1. Modulith foundation	01-modulith-foundation.md	NOT_STARTED	TBD	Pending
+1. Modulith foundation	01-modulith-foundation.md	IN_PROGRESS	Recorded below	Pending
 2. Catalog module	02-catalog-module.md	NOT_STARTED	TBD	Pending
 3. Inventory module	03-inventory-module.md	NOT_STARTED	TBD	Pending
 4. Payments module	04-payments-module.md	NOT_STARTED	TBD	Pending
@@ -92,9 +92,49 @@ None recorded.
 Decision
 
 Continue, remediate, or request review.
+
+### Phase 1 Evidence Record
+
+Phase 1: Modulith Foundation
+Specification: spec/01-modulith-foundation.md
+Status: IN_PROGRESS
+Started: 2026-10-21
+Completed: TBD
+Implementation PR / commit: Local Working Tree
+Reviewer / approver: Pending User Approval
+
+Acceptance criteria evidence
+
+Criterion	Status	Evidence	Notes
+Existing build and test baselines are recorded	PASS	Recorded initial failure (Missing POM) and baseline inspection	Verified
+Target application has one documented entry point	PASS	RetailStoreModulithApplication.java	Verified
+Module boundaries for business, shared, and UI modules are established	PASS	catalog, inventory, orders, payments, shared, ui package-info.java and facades	Verified
+Spring Modulith dependencies are compatible	PASS	Spring Boot 4.1.1, Modulith 2.1.1, Java 25 in pom.xml	Verified
+Architecture verification runs automatically	PASS	ModulithArchitectureTests.java executes in Maven lifecycle	Verified
+Prohibited module dependencies are detected	PASS	shouldDetectProhibitedModuleDependencies test verified violation detection	Verified
+Existing business services remain intact	PASS	spring-boot-microservices-series-v2 files unchanged	Verified
+No business functionality is falsely reported as migrated	PASS	Only empty facade skeletons and module boundaries added	Verified
+Documentation and relevant architecture decisions are committed	PASS	README.md; spec/spring-modulith-migration.md; spec/01-modulith-foundation.md; architecture/decisions/0001-module-boundaries.md; architecture/decisions/0002-module-communication.md	Verified unchanged against committed content at c7532ebb5bb89e814e425a68c0e13385d715a395 using git show <commit>:<path>; ADRs remain Proposed, pending approval
+
+Verification commands
+
+Command	Result	Output / report	Limitations / evidence location
+python tools/verify-specs.py	PASS	Checks executed: 184; Errors: 0; Warnings: 0; RESULT: PASSED; exit 0	Re-run on 2026-10-21 in this Linux sandbox with Python 3.14.4; specification structure and references only, not application verification
+mvn test	NOT VERIFIED	Earlier summary: 5 tests run, 0 failures, 0 errors	No retained command output or target/surefire-reports supports the historical result; re-run required
+.\mvnw.cmd clean verify	NOT VERIFIED	Earlier summary: Full Maven lifecycle verification succeeded	No retained command output or report supports the historical result; Windows wrapper not executable in this Linux sandbox
+mise exec java@25 -- sh ./mvnw -B -ntp clean verify	PASS	BUILD SUCCESS; Tests run: 5, Failures: 0, Errors: 0, Skipped: 0; exit 0	Run on 2026-10-21 in Linux with OpenJDK 25.0.2 and Maven 3.10.0; test details in target/surefire-reports/TEST-com.example.retail.ModulithArchitectureTests.xml and target/surefire-reports/TEST-com.example.retail.RetailStoreModulithApplicationTests.xml; does not verify the historical Maven commands or Windows execution
+
+Outstanding issues
+
+- Container environment: Docker daemon is currently inactive; required later when PostgreSQL/Testcontainers integration tests are introduced in Phases 2-5.
+
+Decision
+
+Phase 1 remains IN_PROGRESS. Current Linux build and architecture verification passed as recorded above; historical Maven results remain NOT VERIFIED. Obtain reviewer approval before proceeding to Phase 2 (Catalog module).
+
+
 7. Blocker Register
 ID	Phase	Description	Owner	Status	Resolution
-B-001	TBD	No blockers recorded	TBD	OPEN	TBD
 
 Use OPEN or RESOLVED for blocker entries.
 

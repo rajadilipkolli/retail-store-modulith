@@ -13,12 +13,18 @@ Without explicit module ownership, moving services into one codebase could creat
 
 2. Decision
 
-The target business modules are:
+The target modules are:
 
 Catalog: product information and catalog-owned pricing behavior.
 Inventory: stock availability, reservation, and release.
 Payments: payment-related operations and financial state.
 Orders: order lifecycle, order persistence, and cross-module orchestration.
+Shared: shared abstractions, cross-cutting contracts, and common models accessible across modules (OPEN module).
+UI: web presentation layer, controllers, and UI views.
+
+When modules need to share common types, DTOs, or cross-cutting contracts, they refer to the Shared module.
+
+The UI module may depend on business modules and the Shared module to render user interface views, but business modules MUST NOT depend on the UI module.
 
 The actual Java package names MUST follow the repository's root package and approved implementation structure.
 

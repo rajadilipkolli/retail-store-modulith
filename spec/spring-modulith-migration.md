@@ -105,7 +105,12 @@ inventory
 orders
 payments
 
-The retail web application MAY remain a separate application.
+along with supporting modules:
+
+shared — common models, cross-cutting contracts, and shared domain primitives (OPEN module).
+ui — web controllers, UI presentation views, and frontend integrations.
+
+The retail web application MAY also be integrated directly as the ui module within the modular monolith.
 
 External consumers MUST access the modular monolith through documented REST endpoints or other explicitly approved interfaces.
 
@@ -281,9 +286,20 @@ The initial permitted business dependency graph is:
 orders -> catalog
 orders -> inventory
 orders -> payments
+orders -> shared
+ui -> catalog
+ui -> inventory
+ui -> orders
+ui -> payments
+ui -> shared
+catalog -> shared
+inventory -> shared
+payments -> shared
 
 
-Catalog, Inventory, and Payments MUST NOT depend on Orders.
+Shared is an OPEN module providing shared abstractions. If any module refers to common contracts or cross-cutting models, it MUST refer to the shared module.
+
+Catalog, Inventory, and Payments MUST NOT depend on Orders or UI.
 
 Additional dependencies MUST have a documented business justification.
 

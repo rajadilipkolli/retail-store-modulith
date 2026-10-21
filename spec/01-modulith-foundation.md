@@ -45,12 +45,14 @@ The application MUST have a single documented entry point.
 
 4. Module Structure
 
-Establish the following top-level business modules:
+Establish the following top-level modules:
 
 catalog
 inventory
 orders
 payments
+shared
+ui
 
 Use package names appropriate to the existing root package.
 
@@ -62,12 +64,20 @@ The foundation phase MAY establish empty module skeletons. It MUST NOT claim bus
 
 The initial permitted dependency graph is:
 
-orders -> catalog
-orders -> inventory
-orders -> payments
+ui -> catalog
+ui -> inventory
+ui -> orders
+ui -> payments
+ui -> shared
+catalog -> shared
+inventory -> shared
+payments -> shared
+orders -> shared
 
 
-Catalog, Inventory, and Payments MUST NOT depend on Orders.
+Shared is an OPEN module providing common abstractions, DTOs, and cross-cutting models. Any module may refer to Shared.
+
+Catalog, Inventory, Order and Payments MUST NOT depend on UI.
 
 No module may depend on another module's internal implementation.
 
@@ -143,7 +153,7 @@ Create architecture decision records using the repository's existing ADR convent
 10. Acceptance Criteria
 Existing build and test baselines are recorded.
 The target application has one documented entry point.
-Four business module boundaries are established.
+Business, shared, and UI module boundaries are established.
 Spring Modulith dependencies are compatible with the selected Spring Boot version.
 Architecture verification runs automatically.
 Prohibited module dependencies are detected.
