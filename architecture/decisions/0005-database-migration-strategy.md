@@ -55,6 +55,7 @@ Add forward-only changesets rather than modifying changesets already applied in 
 Test initialization and upgrades against representative data.
 Document backups, cutover, and rollback constraints.
 Never run destructive migration verification against production data.
+Standardize primary key generation on TSID (Time-Sorted Unique Identifiers) via @Id @Tsid(TsidSupplier.class) from hypersistence-utils-hibernate-73 across all business modules to eliminate database sequence round-trips while providing ordered 64-bit integer IDs.
 6. Verification Requirements
 Existing database topology is documented.
 Target persistence ownership is documented.

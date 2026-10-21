@@ -1,0 +1,19 @@
+/***
+<p>
+    Licensed under MIT License Copyright (c) 2026 Raja Kolli.
+</p>
+***/
+package com.example.retail.catalog.internal.web.models;
+
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import java.math.BigDecimal;
+
+public record ProductRequest(
+        @NotBlank(message = "Product code can't be blank") String productCode,
+        @NotNull(message = "Product name can't be null") String productName,
+        String description,
+        String imageUrl,
+        @Positive @Digits(integer = 17, fraction = 2) BigDecimal price) {}

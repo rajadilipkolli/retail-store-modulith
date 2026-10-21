@@ -9,10 +9,10 @@ The goal is to evolve the existing retail microservices application into a modul
 
 The target business modules are:
 
-Catalog — product information and catalog operations.
-Inventory — stock availability, reservations, and releases.
-Payments — payment and customer financial state.
-Orders — order lifecycle and business workflow orchestration.
+    Catalog — product information and catalog operations.
+    Inventory — stock availability, reservations, and releases.
+    Payments — payment and customer financial state.
+    Orders — order lifecycle and business workflow orchestration.
 
 The migration is incremental and test-driven. Existing microservices must remain intact until the replacement has been verified and the appropriate retirement approval has been granted.
 

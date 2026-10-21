@@ -1,3 +1,8 @@
+/***
+<p>
+    Licensed under MIT License Copyright (c) 2026 Raja Kolli.
+</p>
+***/
 package com.example.retail.violationtest.modulea;
 
 import com.example.retail.violationtest.moduleb.internal.InternalComponent;

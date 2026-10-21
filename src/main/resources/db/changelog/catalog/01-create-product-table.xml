@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="createTable-products" author="rajakolli">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="catalog" tableName="products"/>
+            </not>
+        </preConditions>
+        <createTable schemaName="catalog" tableName="products">
+            <column name="id" type="BIGINT">
+                <constraints primaryKey="true" primaryKeyName="pk_products" nullable="false"/>
+            </column>
+            <column name="product_code" type="VARCHAR(255)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uc_product_code"/>
+            </column>
+            <column name="product_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT"/>
+            <column name="image_url" type="VARCHAR(1024)"/>
+            <column name="price" type="NUMERIC(19,2)"/>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+</databaseChangeLog>
