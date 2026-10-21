@@ -163,7 +163,7 @@ Verification commands
 
 Command	Result	Output / report	Limitations / evidence location
 python tools/verify-specs.py	PASS	Checks executed: 184; Errors: 0; Warnings: 0; RESULT: PASSED; exit 0	Verified specification references and frontmatter
-$env:JAVA_HOME = "C:\Users\1039060\.jdks\graalvm-ce-25.0.2"; .\mvnw clean verify	PASS	BUILD SUCCESS; Total time: 01:34 min; exit 0	Spotless check (40 files clean), Surefire: 26 tests run (0 failures), JaCoCo: unit and integration coverage reports generated, Failsafe: 4 tests run (0 failures), Failsafe verify passed
+.\mvnw clean verify	PASS	BUILD SUCCESS; Total time: 01:34 min; exit 0	Spotless check (40 files clean), Surefire: 26 tests run (0 failures), JaCoCo: unit and integration coverage reports generated, Failsafe: 4 tests run (0 failures), Failsafe verify passed
 DOCKER_HOST=unix:///tmp/catalog-review-docker.sock mise exec java@25 -- sh ./mvnw -B -ntp clean verify	FAIL	Run on 2026-10-21; 56 tests passed; exit 1 at JaCoCo check	OpenJDK 25.0.2, Maven 3.10.0; loads test.exec and integrationTest.exec into merged.exec, then rejects complexity coverage 0.77 < 0.80; target/test-results/{test,integrationTest} and workspace validation record contain evidence
 
 Outstanding issues
