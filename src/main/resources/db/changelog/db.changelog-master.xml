@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <include file="db/changelog/catalog/00-create-catalog-schema.xml"/>
+    <include file="db/changelog/catalog/01-create-product-table.xml"/>
+    <include file="db/changelog/catalog/02-insert-sample-products.xml"/>
+
+    <include file="db/changelog/shared/01-create-event-publication.sql"/>
+    <include file="db/changelog/shared/02-create-event-publication-archive.sql"/>
+
+    <changeSet id="namastack-outbox-schema" author="namastack">
+        <sqlFile path="schema/postgres/outbox-tables.sql" relativeToChangelogFile="false"/>
+    </changeSet>
+
+</databaseChangeLog>

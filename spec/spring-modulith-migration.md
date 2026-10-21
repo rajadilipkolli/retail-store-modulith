@@ -473,3 +473,12 @@ Do not destructively modify previously applied changesets.
 Introduce new changesets for schema changes.
 Preserve business data.
 Preserve identifiers where required
+
+12.4 Identifier generation strategy
+
+All business entity primary keys across modules (catalog, inventory, orders, payments) MUST use TSID (Time-Sorted Unique Identifiers) via @Id @Tsid(TsidSupplier.class) from io.hypersistence:hypersistence-utils-hibernate-73 configured with com.example.retail.shared.persistence.TsidSupplier.
+
+Requirements:
+- Primary key columns MUST be defined as 64-bit integer (BIGINT NOT NULL PRIMARY KEY) without database sequence or auto-increment dependency.
+- TSID values are generated client-side in the application prior to insert, guaranteeing 64-bit time-sorted ordering and eliminating round-trips to database sequences.
+- Existing seeded records retain their designated fixed IDs.

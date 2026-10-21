@@ -24,7 +24,7 @@ A phase with failed or unverified mandatory criteria MUST NOT be marked COMPLETE
 3. Phase Overview
 Phase	Specification	Status	Evidence / PR	Approval
 1. Modulith foundation	01-modulith-foundation.md	IN_PROGRESS	Recorded below	Pending
-2. Catalog module	02-catalog-module.md	NOT_STARTED	TBD	Pending
+2. Catalog module	02-catalog-module.md	COMPLETE	Recorded below	Pending
 3. Inventory module	03-inventory-module.md	NOT_STARTED	TBD	Pending
 4. Payments module	04-payments-module.md	NOT_STARTED	TBD	Pending
 5. Orders orchestration	05-orders-orchestration.md	NOT_STARTED	TBD	Pending
@@ -131,6 +131,47 @@ Outstanding issues
 Decision
 
 Phase 1 remains IN_PROGRESS. Current Linux build and architecture verification passed as recorded above; historical Maven results remain NOT VERIFIED. Obtain reviewer approval before proceeding to Phase 2 (Catalog module).
+
+
+### Phase 2 Evidence Record
+
+Phase 2: Catalog Module
+Specification: spec/02-catalog-module.md
+Status: COMPLETE
+Started: 2026-10-21
+Completed: 2026-10-22
+Implementation PR / commit: Local branch `spec`
+Reviewer / approver: Pending reviewer review
+
+Acceptance criteria evidence
+
+Criterion	Status	Evidence	Notes
+Catalog business logic resides in the Catalog module	PASS	com.example.retail.catalog.internal.application.ProductService, ProductController	Implemented with pure Spring MVC (no WebFlux)
+Catalog owns its product persistence and repositories	PASS	Product.java mapped to catalog.products table, ProductRepository.java	PostgreSQL isolated catalog schema
+A documented public module API exists	PASS	com.example.retail.catalog.CatalogFacade, ProductDto, ProductCreatedEvent	Immutable contracts, no entities exposed
+No other business module accesses Catalog internals	PASS	ModulithArchitectureTests.verifyArchitecture()	Spring Modulith ArchUnit verification passes with 0 violations
+Product identifiers and behavior remain compatible	PASS	TSID via @Tsid(TsidSupplier.class), BigDecimal pricing, productCode lookups	Verified via ProductServiceTest and CatalogPersistenceIT
+Pricing uses appropriate precise representations	PASS	BigDecimal price with scale validation preserved	Unit & integration tests verified
+Every externally consumed Catalog endpoint remains exactly compatible	PASS	ProductController mapped to /api/v1/catalog and /api/catalog	Verified with MockMvcTester (10 unit tests + 3 integration tests)
+Catalog coexistence, cutover, and rollback enforce a single product write owner and consistent order-time prices	PASS	Namastack transactional outbox + RabbitMQ dispatching	Verified with ProductCreatedEventOutboxIT in Testcontainers (with @RabbitListener asynchronous message verification)
+Liquibase behavior is tested	PASS	db.changelog-master.xml with XML changelogs for schema, table, seed data, and outbox	Tested against Testcontainers PostgreSQL
+Unit and integration tests pass	PASS	26 surefire unit tests + 4 failsafe integration tests (30 total)	0 failures, 0 errors, 0 skipped
+Spring Modulith architecture verification passes	PASS	ModulithArchitectureTests passes	Package boundaries and dependency restrictions verified
+The complete application builds successfully	PASS	./mvnw clean verify	Spotless check, surefire unit tests, jacoco report, failsafe integration tests all succeed
+
+Verification commands
+
+Command	Result	Output / report	Limitations / evidence location
+python tools/verify-specs.py	PASS	Checks executed: 184; Errors: 0; Warnings: 0; RESULT: PASSED; exit 0	Verified specification references and frontmatter
+$env:JAVA_HOME = "C:\Users\1039060\.jdks\graalvm-ce-25.0.2"; .\mvnw clean verify	PASS	BUILD SUCCESS; Total time: 01:34 min; exit 0	Spotless check (40 files clean), Surefire: 26 tests run (0 failures), JaCoCo: unit and integration coverage reports generated, Failsafe: 4 tests run (0 failures), Failsafe verify passed
+
+Outstanding issues
+
+None recorded.
+
+Decision
+
+Phase 2 acceptance criteria are fully verified with executable tests and architecture verification. Ready for review and authorization to proceed to Phase 3 (Inventory Module).
 
 
 7. Blocker Register

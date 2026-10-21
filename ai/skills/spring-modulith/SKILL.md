@@ -35,3 +35,4 @@ Before implementation, read:
 - Follow the active phase's acceptance criteria.
 - Shared module rule: Cross-cutting models, common DTOs, and shared abstractions belong in the shared module (OPEN module). If any module needs to reference another module's common contracts, use the shared module.
 - UI module rule: Presentation components, web views, and UI controllers belong in the ui module. Business modules MUST NOT depend on the ui module.
+- Entity ID generation rule: All business entities across modules (catalog, inventory, orders, payments) MUST use TSID (Time-Sorted Unique Identifiers) for primary keys using @Id @Tsid(TsidSupplier.class) from io.hypersistence:hypersistence-utils-hibernate-73 with com.example.retail.shared.persistence.TsidSupplier. Do not use database sequences or auto-increment columns.

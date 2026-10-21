@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="insert-sample-products" author="system" context="sample-data">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">SELECT COUNT(*) FROM catalog.products WHERE product_code = 'P001'</sqlCheck>
+        </preConditions>
+        <insert schemaName="catalog" tableName="products">
+            <column name="id" valueNumeric="1"/>
+            <column name="product_code" value="P001"/>
+            <column name="product_name" value="iPhone 15 Pro"/>
+            <column name="description" value="Latest Apple iPhone with advanced camera system"/>
+            <column name="price" valueNumeric="999.99"/>
+            <column name="image_url" value="https://example.com/images/iphone15pro.jpg"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="catalog" tableName="products">
+            <column name="id" valueNumeric="2"/>
+            <column name="product_code" value="P002"/>
+            <column name="product_name" value="Samsung Galaxy S24"/>
+            <column name="description" value="Premium Android smartphone with AI features"/>
+            <column name="price" valueNumeric="899.99"/>
+            <column name="image_url" value="https://example.com/images/galaxy-s24.jpg"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="catalog" tableName="products">
+            <column name="id" valueNumeric="3"/>
+            <column name="product_code" value="P003"/>
+            <column name="product_name" value="MacBook Air M3"/>
+            <column name="description" value="Ultra-thin laptop with M3 chip"/>
+            <column name="price" valueNumeric="1299.99"/>
+            <column name="image_url" value="https://example.com/images/macbook-air-m3.jpg"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="catalog" tableName="products">
+            <column name="id" valueNumeric="4"/>
+            <column name="product_code" value="P004"/>
+            <column name="product_name" value="Dell XPS 13"/>
+            <column name="description" value="Premium Windows ultrabook"/>
+            <column name="price" valueNumeric="1099.99"/>
+            <column name="image_url" value="https://example.com/images/dell-xps13.jpg"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="catalog" tableName="products">
+            <column name="id" valueNumeric="5"/>
+            <column name="product_code" value="P005"/>
+            <column name="product_name" value="AirPods Pro"/>
+            <column name="description" value="Wireless earbuds with active noise cancellation"/>
+            <column name="price" valueNumeric="249.99"/>
+            <column name="image_url" value="https://example.com/images/airpods-pro.jpg"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+    </changeSet>
+
+</databaseChangeLog>

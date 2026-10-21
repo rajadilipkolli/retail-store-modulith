@@ -1,3 +1,8 @@
+/***
+<p>
+    Licensed under MIT License Copyright (c) 2026 Raja Kolli.
+</p>
+***/
 package com.example.retail;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -11,7 +16,8 @@ import org.springframework.modulith.docs.Documenter;
 
 class ModulithArchitectureTests {
 
-    private final ApplicationModules modules = ApplicationModules.of(RetailStoreModulithApplication.class);
+    private final ApplicationModules modules =
+            ApplicationModules.of(RetailStoreModulithApplication.class);
 
     @Test
     @DisplayName("Should discover all business, shared, and UI modules")
@@ -33,12 +39,10 @@ class ModulithArchitectureTests {
     @Test
     @DisplayName("Should detect prohibited module dependencies and internal access violations")
     void shouldDetectProhibitedModuleDependencies() {
-        ApplicationModules invalidModules = ApplicationModules.of(
-            com.example.retail.violationtest.InvalidApp.class,
-            location -> true
-        );
-        assertThatThrownBy(invalidModules::verify)
-            .isInstanceOf(Violations.class);
+        ApplicationModules invalidModules =
+                ApplicationModules.of(
+                        com.example.retail.violationtest.InvalidApp.class, location -> true);
+        assertThatThrownBy(invalidModules::verify).isInstanceOf(Violations.class);
     }
 
     @Test

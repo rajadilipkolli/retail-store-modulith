@@ -120,6 +120,7 @@ Add new changesets rather than destructively modifying applied changesets.
 Test initialization from an empty database.
 Test compatibility with representative existing data.
 Avoid introducing cross-module foreign keys without justification.
+Product entities MUST use TSID (Time-Sorted Unique Identifiers) for primary keys (id BIGINT) via @Id @Tsid(TsidSupplier.class) from hypersistence-utils-hibernate-73 configured with com.example.retail.shared.persistence.TsidSupplier, avoiding database sequence round-trips.
 
 Do not migrate the entire database or change persistence technology as part of this phase unless explicitly approved.
 
