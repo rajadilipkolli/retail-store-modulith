@@ -133,8 +133,8 @@ public class ProductService implements CatalogFacade {
      * Creates a product and publishes a {@link ProductCreatedEvent} within the transaction.
      *
      * @return the saved product with its assigned ID and unknown (null) stock availability
-     * @throws ProductAlreadyExistsException if the code already exists or saving violates the
-     *     named product-code uniqueness constraint
+     * @throws ProductAlreadyExistsException if the code already exists or saving violates the named
+     *     product-code uniqueness constraint
      * @throws DataIntegrityViolationException if an integrity failure is not recognized as a
      *     duplicate product code
      */
@@ -212,9 +212,8 @@ public class ProductService implements CatalogFacade {
     /**
      * Returns products matching the optional name and price filters. A null or blank term is
      * ignored; otherwise its trimmed value matches a substring of product names without regard to
-     * case. The
-     * inclusive price range applies only when both bounds are supplied. With no active filters,
-     * returns all products. Stock availability is unknown (null).
+     * case. The inclusive price range applies only when both bounds are supplied. With no active
+     * filters, returns all products. Stock availability is unknown (null).
      *
      * @param pageNo zero-based page index
      * @param pageSize maximum number of products per page; must be positive
@@ -264,8 +263,8 @@ public class ProductService implements CatalogFacade {
     }
 
     /**
-     * Saves and flushes the product, translating only the Hibernate constraint named
-     * {@code uc_product_code} into {@link ProductAlreadyExistsException}. Other integrity failures
+     * Saves and flushes the product, translating only the Hibernate constraint named {@code
+     * uc_product_code} into {@link ProductAlreadyExistsException}. Other integrity failures
      * propagate unchanged.
      */
     private Product saveAndFlush(Product product) {
