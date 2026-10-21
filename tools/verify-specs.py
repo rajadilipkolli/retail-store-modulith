@@ -80,22 +80,31 @@ FRONTMATTER_PATTERN = re.compile(
 
 class Validator:
     def __init__(self) -> None:
+        """Start with no diagnostics and zero counted checks."""
         self.errors: list[str] = []
         self.warnings: list[str] = []
         self.checks = 0
 
     def error(self, message: str) -> None:
+        """Append an error without incrementing the check count."""
         self.errors.append(message)
 
     def warning(self, message: str) -> None:
+        """Append a warning without making validation fail."""
         self.warnings.append(message)
 
     def check(self, condition: bool, message: str) -> None:
+        """Count a check and record message as an error if condition is false."""
         self.checks += 1
         if not condition:
             self.error(message)
 
     def read(self, relative_path: Path) -> str | None:
+        """Read a UTF-8 file relative to the repository root and count one check.
+
+        Return None and record an error for a missing file or an OSError or
+        UnicodeError raised while reading it.
+        """
         path = ROOT / relative_path
         self.checks += 1
 
@@ -110,6 +119,10 @@ class Validator:
             return None
 
     def validate_required_files(self) -> dict[Path, str]:
+        """Read required repository files, recording missing or unreadable files.
+
+        Return only successfully read contents, keyed by repository-relative path.
+        """
         files: dict[Path, str] = {}
 
         required = [
@@ -139,6 +152,10 @@ class Validator:
         self,
         files: dict[Path, str],
     ) -> None:
+        """Check headings and nonempty acceptance criteria in supplied phase texts.
+
+        Skip phases absent from files; accept Definition of Done as an exit heading.
+        """
         for phase in PHASE_SPECS:
             content = files.get(phase)
             if content is None:
@@ -180,6 +197,10 @@ class Validator:
         self,
         files: dict[Path, str],
     ) -> None:
+        """Check required skill texts for frontmatter delimiters, name, and description.
+
+        Names must match their directories. Skip skills absent from files.
+        """
         for skill_path in REQUIRED_SKILLS:
             content = files.get(skill_path)
             if content is None:
@@ -236,6 +257,10 @@ class Validator:
         self,
         files: dict[Path, str],
     ) -> None:
+        """Check AGENTS.md skill references exist and every required skill is mentioned.
+
+        Skip validation if files does not contain AGENTS.md.
+        """
         agents_content = files.get(Path("AGENTS.md"))
 
         if agents_content is None:
@@ -261,6 +286,11 @@ class Validator:
         self,
         files: dict[Path, str],
     ) -> None:
+        """Check recognized repository-relative Markdown file references exist.
+
+        Inspect only .md entries in files for paths under spec, ai/skills, or
+        architecture/decisions, resolving targets against the repository root.
+        """
         # Check explicit repository-relative Markdown references in
         # relevant documentation. Ignore URLs, anchors, and examples
         # that do not match the recognized repository path prefixes.
@@ -281,6 +311,13 @@ class Validator:
         self,
         files: dict[Path, str],
     ) -> None:
+        """Check supplied phase dependency metadata for valid targets and cycles.
+
+        Warn for missing metadata or unrecognized dependency text. Empty values,
+        none, n/a, and not applicable declare no dependencies, ignoring case.
+        Record errors for unknown specs, self-dependencies, missing target files,
+        and phase dependency cycles. Skip phases absent from files.
+        """
         known_specs = {MASTER_SPEC, *PHASE_SPECS}
         graph: dict[Path, set[Path]] = defaultdict(set)
 
@@ -374,6 +411,10 @@ class Validator:
         self,
         files: dict[Path, str],
     ) -> None:
+        """Check master phase mentions and reject dependencies on later phases.
+
+        Inspect only master and phase texts present in files.
+        """
         # Ensure the master specification refers to every phase.
         master = files.get(MASTER_SPEC)
 
@@ -411,6 +452,11 @@ class Validator:
                     )
 
     def run(self) -> int:
+        """Run all validations and print counts, diagnostics, and the result to stdout.
+
+        Return 1 if errors are recorded, otherwise 0; warnings alone do not fail.
+        Existing diagnostics and the check count are retained across calls.
+        """
         print("Specification validation")
         print(f"Repository: {ROOT}")
         print()
@@ -445,6 +491,7 @@ class Validator:
 
 
 def main() -> int:
+    """Run a fresh validator, print its report, and return its exit status (0 or 1)."""
     validator = Validator()
     return validator.run()
 
