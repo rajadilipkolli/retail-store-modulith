@@ -2,7 +2,7 @@
 name: migration-verification
 description: Use when validating migration phases, checking specification acceptance criteria, assessing compatibility, verifying data integrity, or preparing a Spring Modulith migration for approval.
 ---
-#Migration Verification Skill
+# Migration Verification Skill
 1. Purpose
 
 Verify migration readiness through executable tests, architecture checks, compatibility evidence, and explicit acceptance criteria.
