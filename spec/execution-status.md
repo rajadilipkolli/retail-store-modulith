@@ -23,8 +23,8 @@ A phase with failed or unverified mandatory criteria MUST NOT be marked COMPLETE
 
 3. Phase Overview
 Phase	Specification	Status	Evidence / PR	Approval
-1. Modulith foundation	01-modulith-foundation.md	IN_PROGRESS	Recorded below	Pending
-2. Catalog module	02-catalog-module.md	BLOCKED	Recorded below	Pending
+1. Modulith foundation	01-modulith-foundation.md	COMPLETE	Recorded below	Approved
+2. Catalog module	02-catalog-module.md	IN_PROGRESS	Recorded below	Pending
 3. Inventory module	03-inventory-module.md	NOT_STARTED	TBD	Pending
 4. Payments module	04-payments-module.md	NOT_STARTED	TBD	Pending
 5. Orders orchestration	05-orders-orchestration.md	NOT_STARTED	TBD	Pending
@@ -97,11 +97,11 @@ Continue, remediate, or request review.
 
 Phase 1: Modulith Foundation
 Specification: spec/01-modulith-foundation.md
-Status: IN_PROGRESS
+Status: COMPLETE
 Started: 2026-10-21
-Completed: TBD
+Completed: 2026-10-21
 Implementation PR / commit: Local Working Tree
-Reviewer / approver: Pending User Approval
+Reviewer / approver: User Approved
 
 Acceptance criteria evidence
 
@@ -130,17 +130,17 @@ Outstanding issues
 
 Decision
 
-Phase 1 remains IN_PROGRESS. Current Linux build and architecture verification passed as recorded above; historical Maven results remain NOT VERIFIED. Obtain reviewer approval before proceeding to Phase 2 (Catalog module).
+Phase 1 is COMPLETE. Foundation, packaging, module boundaries, shared and UI modules, and architecture tests verified.
 
 
 ### Phase 2 Evidence Record
 
 Phase 2: Catalog Module
 Specification: spec/02-catalog-module.md
-Status: BLOCKED
+Status: IN_PROGRESS
 Started: 2026-10-21
 Completed: 2026-10-22
-Implementation PR / commit: Local branch `spec`
+Implementation PR / commit: Local branch `catalog-service`
 Reviewer / approver: Pending reviewer review
 
 Acceptance criteria evidence

@@ -8,6 +8,7 @@ package com.example.retail.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -397,6 +398,166 @@ class ProductServiceTest {
         var request = new ProductRequest("P001", "Name", null, null, null);
         assertThatThrownBy(() -> productService.saveProduct(request)).isSameAs(violation);
         assertThatThrownBy(() -> productService.updateProduct(1L, request)).isSameAs(violation);
+    }
+
+    @Test
+    void findAllProducts_DescSort() {
+        Product p1 =
+                new Product(
+                        1L, "P001", "Product 1", "Desc 1", BigDecimal.valueOf(10.0), "img1.jpg");
+        given(productRepository.findAll(any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(p1)));
+
+        PagedResult<ProductResponse> result =
+                productService.findAllProducts(0, 10, "productName", "desc");
+
+        assertThat(result.data()).hasSize(1);
+    }
+
+    @Test
+    void facade_findProductById_Found() {
+        Product p =
+                new Product(1L, "P001", "Product 1", "Desc", BigDecimal.valueOf(10.0), "img.jpg");
+        given(productRepository.findById(1L)).willReturn(Optional.of(p));
+
+        Optional<ProductDto> dto = productService.findProductById(1L);
+
+        assertThat(dto).isPresent();
+        assertThat(dto.get().id()).isEqualTo(1L);
+        assertThat(dto.get().productCode()).isEqualTo("P001");
+    }
+
+    @Test
+    void facade_findProductById_NotFound() {
+        given(productRepository.findById(999L)).willReturn(Optional.empty());
+
+        Optional<ProductDto> dto = productService.findProductById(999L);
+
+        assertThat(dto).isEmpty();
+    }
+
+    @Test
+    void facade_existsByProductCode_True() {
+        given(productRepository.existsByProductCode("P001")).willReturn(true);
+
+        assertThat(productService.existsByProductCode("P001")).isTrue();
+    }
+
+    @Test
+    void facade_existsByProductCode_False() {
+        given(productRepository.existsByProductCode("UNKNOWN")).willReturn(false);
+
+        assertThat(productService.existsByProductCode("UNKNOWN")).isFalse();
+    }
+
+    @Test
+    void existsByProductCodes_NullOrEmpty() {
+        assertThat(productService.existsByProductCodes(null)).isFalse();
+        assertThat(productService.existsByProductCodes(List.of())).isFalse();
+    }
+
+    @Test
+    void productExistsByProductCodes_Delegates() {
+        given(productRepository.countByProductCodeIn(any())).willReturn(1L);
+
+        assertThat(productService.productExistsByProductCodes(List.of("P001"))).isTrue();
+    }
+
+    @Test
+    void updateProduct_NotFound_ThrowsException() {
+        given(productRepository.findById(999L)).willReturn(Optional.empty());
+
+        ProductRequest request =
+                new ProductRequest("P999", "Name", "Desc", "img.jpg", BigDecimal.valueOf(10.0));
+
+        assertThatThrownBy(() -> productService.updateProduct(999L, request))
+                .isInstanceOf(ProductNotFoundException.class);
+    }
+
+    @Test
+    void deleteProductById_NotFound_ThrowsException() {
+        given(productRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.deleteProductById(999L))
+                .isInstanceOf(ProductNotFoundException.class);
+    }
+
+    @Test
+    void searchProducts_TermAndPriceRange_Desc() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Product p = new Product(1L, "P001", "Phone", "Desc", BigDecimal.valueOf(100.0), "img.jpg");
+        given(
+                        productRepository.findByProductNameContainingIgnoreCaseAndPriceBetween(
+                                eq("phone"),
+                                eq(BigDecimal.valueOf(50)),
+                                eq(BigDecimal.valueOf(150)),
+                                any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(p), pageable, 1));
+
+        PagedResult<ProductResponse> result =
+                productService.searchProducts(
+                        " phone ",
+                        BigDecimal.valueOf(50),
+                        BigDecimal.valueOf(150),
+                        0,
+                        10,
+                        "price",
+                        "desc");
+
+        assertThat(result.data()).hasSize(1);
+        assertThat(result.data().getFirst().productName()).isEqualTo("Phone");
+    }
+
+    @Test
+    void searchProducts_TermOnly() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Product p = new Product(1L, "P001", "Phone", "Desc", BigDecimal.valueOf(100.0), "img.jpg");
+        given(
+                        productRepository.findByProductNameContainingIgnoreCase(
+                                eq("phone"), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(p), pageable, 1));
+
+        PagedResult<ProductResponse> result =
+                productService.searchProducts("phone", null, null, 0, 10, "productName", "asc");
+
+        assertThat(result.data()).hasSize(1);
+    }
+
+    @Test
+    void searchProducts_PriceRangeOnly() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Product p = new Product(1L, "P001", "Phone", "Desc", BigDecimal.valueOf(100.0), "img.jpg");
+        given(
+                        productRepository.findByPriceBetween(
+                                eq(BigDecimal.valueOf(50)),
+                                eq(BigDecimal.valueOf(150)),
+                                any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(p), pageable, 1));
+
+        PagedResult<ProductResponse> result =
+                productService.searchProducts(
+                        null,
+                        BigDecimal.valueOf(50),
+                        BigDecimal.valueOf(150),
+                        0,
+                        10,
+                        "price",
+                        "asc");
+
+        assertThat(result.data()).hasSize(1);
+    }
+
+    @Test
+    void searchProducts_BlankTerm_FallsBackToFindAll() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Product p = new Product(1L, "P001", "Phone", "Desc", BigDecimal.valueOf(100.0), "img.jpg");
+        given(productRepository.findAll(any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(p), pageable, 1));
+
+        PagedResult<ProductResponse> result =
+                productService.searchProducts("   ", null, null, 0, 10, "id", "asc");
+
+        assertThat(result.data()).hasSize(1);
     }
 
     private DataIntegrityViolationException integrityViolation(String constraint) {

@@ -285,6 +285,101 @@ class ProductControllerTest {
                 .isEqualTo("P001");
     }
 
+    @Test
+    @DisplayName("GET /api/v1/catalog/search returns paged products matching filters")
+    void searchProducts_Valid() {
+        ProductResponse p1 =
+                new ProductResponse(
+                        1L,
+                        "P001",
+                        "Smartphone",
+                        "Desc",
+                        "img.jpg",
+                        BigDecimal.valueOf(199.99),
+                        null);
+        PagedResult<ProductResponse> pagedResult = new PagedResult<>(new PageImpl<>(List.of(p1)));
+        given(
+                        productService.searchProducts(
+                                "Smart",
+                                BigDecimal.valueOf(100),
+                                BigDecimal.valueOf(300),
+                                0,
+                                10,
+                                "price",
+                                "desc"))
+                .willReturn(pagedResult);
+
+        assertThat(
+                        mockMvcTester
+                                .get()
+                                .uri("/api/v1/catalog/search")
+                                .param("term", "Smart")
+                                .param("minPrice", "100")
+                                .param("maxPrice", "300")
+                                .param("sortBy", "price")
+                                .param("sortDir", "desc"))
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data")
+                .asArray()
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/catalog/{id} returns 404 when product not found")
+    void updateProduct_NotFound_Returns404() {
+        given(productService.updateProduct(eq(999L), any(ProductRequest.class)))
+                .willThrow(new ProductNotFoundException(999L));
+
+        String json =
+                """
+                {
+                    "productCode": "P999",
+                    "productName": "Name",
+                    "price": 10.0
+                }
+                """;
+
+        assertThat(
+                        mockMvcTester
+                                .put()
+                                .uri("/api/v1/catalog/999")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(json))
+                .hasStatus(HttpStatus.NOT_FOUND)
+                .bodyJson()
+                .extractingPath("$.title")
+                .isEqualTo("Product Not Found");
+    }
+
+    @Test
+    @DisplayName("DELETE /api/v1/catalog/{id} returns 404 when product not found")
+    void deleteProduct_NotFound_Returns404() {
+        given(productService.deleteProductById(999L)).willThrow(new ProductNotFoundException(999L));
+
+        assertThat(mockMvcTester.delete().uri("/api/v1/catalog/999"))
+                .hasStatus(HttpStatus.NOT_FOUND)
+                .bodyJson()
+                .extractingPath("$.title")
+                .isEqualTo("Product Not Found");
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/catalog/exists returns false when code missing")
+    void productExists_False() {
+        given(productService.productExistsByProductCodes(List.of("UNKNOWN"))).willReturn(false);
+
+        assertThat(
+                        mockMvcTester
+                                .get()
+                                .uri("/api/v1/catalog/exists")
+                                .param("productCodes", "UNKNOWN"))
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.exists")
+                .isEqualTo(false);
+    }
+
     @ParameterizedTest
     @CsvSource({
         "/api/v1/catalog, pageNo, -1",
