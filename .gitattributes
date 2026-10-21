@@ -1,0 +1,2 @@
+# Keep Java line endings consistent with Spotless across platforms.
+*.java text eol=lf
