@@ -68,7 +68,7 @@ Append a record for each phase when work begins or its status changes.
 
 Record template
 Phase N: Phase title
-Specification: spec/NN-phase-name.md
+Specification: <repository-relative path to the phase specification>
 Status: NOT_STARTED
 Started: YYYY-MM-DD or TBD
 Completed: TBD

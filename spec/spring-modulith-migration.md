@@ -6,6 +6,16 @@ Repository: rajadilipkolli/spring-boot-microservices-series-v2
 Target Architecture: Spring Boot Modular Monolith
 Initial Java Baseline: Java 21, subject to repository verification
 Build System: Maven
+Migration phases (in dependency order):
+
+1. Foundation: spec/01-modulith-foundation.md
+2. Catalog: spec/02-catalog-module.md
+3. Inventory: spec/03-inventory-module.md
+4. Payments: spec/04-payments-module.md
+5. Orders: spec/05-orders-orchestration.md
+6. API and deployment: spec/06-api-and-deployment.md
+7. Migration verification: spec/07-migration-verification.md
+
 1. Objective
 
 Transform the existing retail microservices application into a modular monolith using Spring Boot and Spring Modulith.
