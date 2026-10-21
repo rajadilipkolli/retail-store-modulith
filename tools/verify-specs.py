@@ -68,7 +68,7 @@ SPEC_PATH_PATTERN = re.compile(
 SKILL_REFERENCE_PATTERN = re.compile(r"ai/skills/[A-Za-z0-9_.-]+/SKILL\.md")
 
 DEPENDENCY_HEADING_PATTERN = re.compile(
-    r"^[ \t]*(?:-[ \t]+)?(?:\*\*Depends on:\*\*|Depends on:)[ \t]*(.*?)[ \t]*$",
+    r"^[ \t]*(?:-[ \t]+)?(?:\*\*Depends on:\*\*|Depends[ _]on:)[ \t]*(.*?)[ \t]*$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -293,7 +293,7 @@ class Validator:
 
             if not match:
                 self.warning(
-                    f"{phase}: no '**Depends on:**' metadata found; "
+                    f"{phase}: no dependency metadata found; "
                     "verify prerequisites manually"
                 )
                 continue

@@ -155,7 +155,8 @@ The intended dependency direction is:
 Orders may depend on Catalog's public API.
 Orders may depend on Inventory's public API.
 Orders may depend on Payments' public API.
-Catalog, Inventory, and Payments MUST NOT depend on Orders' internal implementation.
+Catalog, Inventory, and Payments MUST NOT depend on Orders, including its public APIs and events.
+Other modules MUST NOT access Orders' internal implementation.
 Business modules MUST NOT introduce cyclic dependencies.
 No module may access another module's internal persistence implementation.
 

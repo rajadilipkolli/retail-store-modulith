@@ -73,6 +73,34 @@ class ValidatorTests(unittest.TestCase):
                    "## Exit Criteria\nReady.\n")
         self.run_validator(0, "RESULT: PASSED")
 
+    def test_yaml_frontmatter_dependency_metadata_passes(self):
+        self.write("spec/01-modulith-foundation.md",
+                   '---\ntitle: "Specification 01: Spring Modulith Foundation"\n'
+                   'status: Proposed\n'
+                   'depends_on: "spec/spring-modulith-migration.md"\n'
+                   'phase: "1 — Modulith Foundation"\n---\n'
+                   '# Specification 01: Spring Modulith Foundation\n'
+                   '10. Acceptance Criteria\nVerified.\n'
+                   '11. Exit Criteria\nReady.\n')
+        output = self.run_validator(0, "RESULT: PASSED")
+        self.assertIn("Warnings: 0", output)
+
+    def test_yaml_frontmatter_invalid_dependencies_fail(self):
+        cases = (
+            ("spec/missing.md", "unknown dependency 'spec/missing.md'"),
+            ("spec/01-modulith-foundation.md", "a phase cannot depend on itself"),
+            ("spec/07-migration-verification.md",
+             "depends on later phase spec/07-migration-verification.md"),
+            ("spec/02-catalog-module.md", "Phase dependency graph contains a cycle"),
+        )
+        for dependency, message in cases:
+            with self.subTest(dependency=dependency):
+                self.write("spec/01-modulith-foundation.md",
+                           f'---\ndepends_on: "{dependency}"\n---\n'
+                           '10. Acceptance Criteria\nVerified.\n'
+                           '11. Exit Criteria\nReady.\n')
+                self.run_validator(1, message)
+
     def test_invalid_frontmatter_fails(self):
         self.write("ai/skills/spring-modulith/SKILL.md", "# Missing metadata\n")
         self.run_validator(1, "missing valid YAML frontmatter delimiters")

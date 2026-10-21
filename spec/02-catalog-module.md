@@ -1,7 +1,11 @@
+---
+title: "Specification 02: Catalog Module"
+status: "Proposed"
+depends_on: "spec/01-modulith-foundation.md"
+phase: "2 — Catalog Migration"
+---
+
 Specification 02: Catalog Module
-Status: Proposed
-Depends on: spec/01-modulith-foundation.md
-Phase: 2 — Catalog Migration
 1. Objective
 
 Migrate the existing Catalog business capability into the catalog Spring Modulith module while preserving existing product behavior, persistence, validations, and externally consumed API contracts.
@@ -51,6 +55,8 @@ Public product query interfaces.
 
 Other modules MUST NOT directly access Catalog entities or repositories.
 
+Catalog MUST NOT depend on Orders, including its public APIs and events.
+
 4. Public Module API
 
 Provide a small public API for required cross-module operations.
@@ -79,7 +85,7 @@ Existing product lookup behavior.
 Existing validation rules.
 Existing filtering and pagination.
 Existing product availability semantics, if implemented by Catalog.
-Existing API request and response formats where practical.
+Exact compatibility of existing request and response formats for every externally consumed Catalog endpoint. Deviations require an explicitly approved, versioned exception documenting the affected endpoint, consumer impact, and approver.
 
 Catalog MUST NOT become responsible for inventory reservations merely because product availability is queried during order creation.
 
@@ -99,7 +105,7 @@ Do not allow Orders to modify Catalog persistence directly.
 
 The order workflow MUST use the agreed price at order creation time rather than relying on future catalog price changes.
 
-Any change to pricing behavior MUST be explicitly documented.
+Any change to pricing behavior MUST be explicitly documented and approved. Changes affecting an externally consumed contract also require the versioned exception defined in Section 5.
 
 7. Persistence and Liquibase
 
@@ -119,7 +125,7 @@ Do not migrate the entire database or change persistence technology as part of t
 
 8. REST Integration
 
-Where the existing Catalog REST API must remain available, preserve its external contract.
+Every externally consumed Catalog REST endpoint MUST preserve its exact external contract, including routes, methods, request and response formats, validation, status codes, errors, security, filtering, and pagination. Deviations require the explicitly approved, versioned exception defined in Section 5.
 
 The new application MUST route requests to the Catalog module's controller or adapter without introducing unnecessary internal HTTP calls.
 
@@ -143,10 +149,11 @@ Add integration tests for:
 Persistence operations.
 Liquibase initialization.
 Public module API behavior.
-Existing REST contracts.
+Exact compatibility for every externally consumed REST contract and each explicitly approved, versioned exception.
+Catalog cutover and rollback routing, write fencing, data reconciliation, and order-time price consistency.
 Application context integration.
 
-Add architecture tests ensuring other modules cannot access Catalog internals.
+Add architecture tests ensuring other modules cannot access Catalog internals and Catalog cannot depend on Orders.
 
 Use PostgreSQL integration testing where database-specific behavior matters.
 
@@ -157,7 +164,8 @@ A documented public module API exists.
 No other business module accesses Catalog internals.
 Product identifiers and behavior remain compatible.
 Pricing uses appropriate precise representations.
-Existing Catalog endpoints remain compatible or changes are documented.
+Every externally consumed Catalog endpoint remains exactly compatible unless covered by an explicitly approved, versioned exception.
+Catalog coexistence, cutover, and rollback enforce a single product write owner and consistent order-time prices.
 Liquibase behavior is tested.
 Unit and integration tests pass.
 Spring Modulith architecture verification passes.
@@ -168,7 +176,15 @@ Catalog functionality MUST be usable through the modular monolith's module API.
 
 Orders and Inventory MUST be able to integrate with Catalog without accessing its repositories or entities.
 
-The original Catalog service MUST remain available until the overall migration is approved.
+The original Catalog service MUST remain available for reads until the overall migration is approved. Write ownership MUST follow this coexistence contract:
+
+Before cutover, the original Catalog service and its product store are authoritative and are the sole product write owner. The new module may serve verified shadow reads but MUST NOT accept production product writes or supply unverified prices to live orders.
+At the explicitly approved cutover, fence legacy writes, drain in-flight mutations and affected order creation, transfer and reconcile product data and prices, then designate the Catalog module and its product store as the sole authority. If the physical store is retained, transfer exclusive write access instead of copying it.
+After cutover, route all product mutations, external reads, and order-time product/price lookups to the module. Retained legacy read endpoints MUST proxy to the module's public query API; they MUST NOT serve a stale independent store. Legacy mutation routes MUST be routed to the module or rejected before execution.
+Uncontrolled dual writes are prohibited. Application credentials, routing, background jobs, event consumers, and administrative paths MUST enforce exactly one product write owner at a time.
+Document routing changes, write fencing, reconciliation evidence, monitoring, rollback triggers, and the cutover owner before enabling production traffic.
+Rollback MUST first fence module writes and drain affected operations, reconcile all post-cutover product changes into the legacy store, and verify product identifiers and prices before transferring sole write ownership and routing back to the original service. If reconciliation cannot be proven, keep writes fenced and block rollback.
+Existing orders MUST retain their agreed price snapshots throughout cutover and rollback. New orders MUST obtain prices only from the current authoritative Catalog API.
 
 12. Implementation Rules
 

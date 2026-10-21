@@ -1,11 +1,15 @@
+---
+title: "Specification: Migrate Spring Boot Microservices to Spring Modulith"
+status: "Proposed"
+type: "Architecture Migration"
+approach: "Specification-Driven Development (SDD)"
+repository: "rajadilipkolli/spring-boot-microservices-series-v2"
+target_architecture: "Spring Boot Modular Monolith"
+initial_java_baseline: "Java 21, subject to repository verification"
+build_system: "Maven"
+---
+
 Specification: Migrate Spring Boot Microservices to Spring Modulith
-Status: Proposed
-Type: Architecture Migration
-Approach: Specification-Driven Development (SDD)
-Repository: rajadilipkolli/spring-boot-microservices-series-v2
-Target Architecture: Spring Boot Modular Monolith
-Initial Java Baseline: Java 21, subject to repository verification
-Build System: Maven
 Migration phases (in dependency order):
 
 1. Foundation: spec/01-modulith-foundation.md

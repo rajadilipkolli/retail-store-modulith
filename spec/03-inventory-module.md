@@ -1,7 +1,11 @@
+---
+title: "Specification 03: Inventory Module"
+status: "Proposed"
+depends_on: "spec/01-modulith-foundation.md, spec/02-catalog-module.md"
+phase: "3 — Inventory Migration"
+---
+
 Specification 03: Inventory Module
-Status: Proposed
-Depends on: spec/01-modulith-foundation.md, spec/02-catalog-module.md
-Phase: 3 — Inventory Migration
 1. Objective
 
 Migrate the existing Inventory business capability into the inventory Spring Modulith module while preserving stock management behavior, concurrency guarantees, reservation semantics, and database integrity.
@@ -62,9 +66,11 @@ Retrieving reservation status where required.
 
 Method signatures MUST follow the actual domain model.
 
-Commands SHOULD identify the order or reservation using a stable identifier.
+Commands MUST identify the order or reservation using stable business identifiers.
 
-Reservation requests SHOULD include the product identifier and requested quantity.
+Every reservation request MUST include a mandatory idempotency identifier, product identifier, and positive requested quantity. Document the identifier's scope; enforce its uniqueness in persistent storage and bind it to the product, quantity, and associated business operation atomically with reservation processing.
+
+Identical requests with the same identifier MUST return the existing reservation and its current outcome/state without reserving stock again, including concurrent retries. Reusing the identifier with a different product, quantity, or business operation MUST return an explicit idempotency conflict without changing stock or the original reservation. A new reservation after a terminal outcome requires a new identifier.
 
 Results MUST distinguish successful reservations from insufficient stock and other business failures.
 
@@ -99,9 +105,28 @@ Failed.
 
 These are conceptual states, not mandatory enum values.
 
-Document permitted transitions and their effects on available stock.
+The following transition contract MUST be mapped to the implemented states. Let q be the positive reserved quantity; available stock is unreserved stock, and reserved stock is held but unconsumed stock. Deltas apply atomically to stock and reservation state.
 
-A reservation MUST NOT be released after it has been irreversibly consumed unless the domain explicitly supports a corresponding reversal operation.
+| Current state | Command or outcome | Resulting state | Available delta | Reserved delta | Behavior |
+| --- | --- | --- | --- | --- | --- |
+| None | Valid new reservation request | Requested | 0 | 0 | Persist the identifier and request binding. |
+| Requested | Reserve succeeds | Reserved | -q | +q | Check availability and reserve atomically. |
+| Requested | Insufficient stock or business validation fails | Failed | 0 | 0 | Persist the failure; identical retries return it. |
+| Reserved | Release | Released | +q | -q | Restore stock exactly once. |
+| Released | Duplicate release | Released | 0 | 0 | Idempotent success. |
+| Reserved | Consume or commit | Consumed | 0 | -q | Remove the hold and fulfill q units; consumption is irreversible. |
+| Consumed | Duplicate consume or commit | Consumed | 0 | 0 | Idempotent success. |
+| Consumed | Release | Consumed | 0 | 0 | Reject; release cannot reverse consumption. |
+| Any existing state | Identical reservation retry | Unchanged | 0 | 0 | Return the existing reservation and current outcome/state; do not reserve again. |
+| Any existing state | Identifier reused with different request | Unchanged | 0 | 0 | Reject with an idempotency conflict. |
+| Any state | Technical failure before a transition commits | Unchanged | 0 | 0 | Roll back state and stock together; retry the same command. |
+| Requested, Failed, or unknown | Release or consume | Unchanged | 0 | 0 | Reject invalid transition or unknown reservation. |
+| Released | Consume | Released | 0 | 0 | Reject invalid transition. |
+| Reserved | Later order/payment failure | Reserved until release commits, then Released | +q on release | -q on release | Compensate via release; a failed release leaves the hold intact for retry. |
+
+All unlisted transitions MUST be rejected without stock changes. A reserved hold MUST NOT be marked Failed without the corresponding stock restoration. After an uncertain commit outcome, retries MUST read the persisted reservation before attempting another mutation.
+
+A reservation MUST NOT be released after it has been irreversibly consumed. A separately approved domain reversal or return, if supported, MUST be modeled and audited as a distinct operation rather than a release.
 
 Do not introduce expiration or automatic release behavior without defining its timing and consistency implications.
 
@@ -129,7 +154,9 @@ Inventory MUST NOT access Catalog repositories or entities.
 
 Orders MUST use Inventory's public API for stock operations.
 
-Inventory MUST NOT depend on Orders' internal implementation.
+Inventory MUST NOT depend on Orders, including its public APIs and events.
+
+Inventory MUST NOT access Orders' internal implementation.
 
 If an event is required to communicate inventory outcomes, publish an immutable event containing the necessary business identifiers and outcome.
 
@@ -159,8 +186,9 @@ Successful reservation.
 Insufficient stock.
 Invalid quantities.
 Reservation release.
-Duplicate reservation requests.
-Duplicate release requests.
+Identical and concurrent duplicate reservation requests.
+Missing idempotency identifiers and reuse with different products, quantities, or business operations.
+Every lifecycle table row, including duplicate release, consumption, duplicate consumption, release after consumption, and failure/compensation paths.
 Invalid reservation transitions.
 Integration tests
 
@@ -184,8 +212,9 @@ Inventory owns its persistence.
 A documented public API exists.
 Stock cannot become negative.
 Concurrent reservations cannot oversell stock.
+Every reservation has a mandatory persistent idempotency identifier; identical retries are idempotent and mismatched requests conflict without stock changes.
 Reservation and release operations are idempotent.
-Reservation transitions are validated.
+Reservation transitions and their available/reserved stock effects match the lifecycle table.
 Compensation behavior is defined where required.
 Existing inventory data is preserved.
 Liquibase migrations are tested.

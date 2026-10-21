@@ -1,7 +1,11 @@
+---
+title: "Specification 05: Orders Module and Orchestration"
+status: "Proposed"
+depends_on: "spec/01-modulith-foundation.md, spec/02-catalog-module.md, spec/03-inventory-module.md, spec/04-payments-module.md"
+phase: "5 — Order Migration"
+---
+
 Specification 05: Orders Module and Orchestration
-Status: Proposed
-Depends on: spec/01-modulith-foundation.md, spec/02-catalog-module.md, spec/03-inventory-module.md, spec/04-payments-module.md
-Phase: 5 — Order Migration
 1. Objective
 
 Migrate the existing Order service into the orders Spring Modulith module and implement a clearly defined order-processing workflow using the public APIs of Catalog, Inventory, and Payments.
@@ -50,6 +54,8 @@ Order creation and cancellation.
 Cross-module workflow orchestration.
 Order-related application events.
 Order-specific validations.
+
+Catalog, Inventory, and Payments MUST NOT depend on Orders, including its public APIs and events.
 
 Other modules MUST NOT access Orders internals.
 
@@ -152,12 +158,15 @@ Order creation MUST support safe retry behavior.
 
 Requirements:
 
-Use an idempotency key or an equivalent stable request identifier where appropriate.
-Enforce uniqueness in persistent storage where necessary.
-Concurrent duplicate requests MUST NOT create duplicate orders.
-Repeated requests MUST return a consistent result where appropriate.
-A legitimate new order MUST remain distinguishable from a retry.
-Idempotency behavior MUST be documented for external API consumers.
+Order creation MUST use an idempotency key or equivalent stable request identifier.
+Bind each key to a documented scope consisting of the authorized customer identifier and, where applicable, tenant identifier for the create-order operation. Derive that scope from validated caller context; never trust an unvalidated customer or tenant identifier.
+Persist a versioned canonical request fingerprint with the scoped key. Document the canonicalization algorithm and all business-relevant fields, including product identifiers, quantities, supplied currency/prices where applicable, and delivery details. Normalize equivalent representations without dropping meaningful differences. Exclude transport metadata and server-generated values; retries MUST reuse the original price snapshot rather than reprice an existing order.
+Enforce uniqueness of (scope, key) in persistent storage and atomically claim the key and fingerprint before business side effects. Concurrent identical requests MUST share the same operation and MUST NOT repeat inventory or payment effects.
+On same-scope key reuse, compare the canonical request fingerprint. Identical requests MUST return the original order/result; while processing, return the documented in-progress response without starting another workflow.
+A different fingerprint for the same scoped key MUST return an explicit idempotency conflict (HTTP 409 with a documented error code at REST boundaries), without creating another order, mutating the original order, or performing inventory/payment operations.
+The same key used by different authorized customers or tenants belongs to independent scopes and MUST NOT reveal or reuse another scope's order/result. Normal authorization checks still apply to every request and replay.
+A legitimate new order in the same scope MUST use a new key.
+Document the scope, canonicalization/fingerprint version, duplicate/in-progress responses, and conflict response for external API consumers.
 
 Do not rely solely on in-memory state to prevent duplicate order creation.
 
@@ -258,7 +267,8 @@ Public module API calls.
 Persistence and transaction behavior.
 Liquibase initialization.
 Application event publication.
-Retry and idempotency behavior.
+Retry and idempotency behavior, including concurrent identical requests, same-key different payloads rejected with no side effects, canonical-equivalent representations, and independent reuse across authorized customers/tenants.
+Persistence of the scoped key, fingerprint, and original result across process restart.
 End-to-end tests
 
 Cover:
@@ -269,7 +279,9 @@ Ineligible customer.
 Insufficient inventory.
 Payment authorization failure.
 Order persistence failure.
-Duplicate requests.
+Same-scope same-key identical requests returning the same order and original price snapshot.
+Same-scope same-key differing requests returning HTTP 409 and leaving order, inventory, and payment state unchanged.
+Same-key reuse across authorized customers/tenants creating independent orders without cross-scope result disclosure; unauthorized scope selection is rejected.
 Cancellation.
 Inventory release after failure.
 Payment compensation after failure.
@@ -285,7 +297,7 @@ Public module APIs are used for all cross-module interactions.
 Existing business workflow is preserved or intentionally revised.
 Order state transitions are explicit.
 Order-time prices are preserved.
-Duplicate order creation is prevented.
+Scoped idempotency keys and canonical fingerprints prevent duplicate orders and side effects; mismatched reuse conflicts explicitly and cross-customer reuse remains isolated.
 Failure and compensation paths are defined.
 Application events have documented transaction semantics.
 Inventory and payment operations remain consistent after failures.

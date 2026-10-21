@@ -1,7 +1,11 @@
+---
+title: "Specification 07: Migration Verification and Completion"
+status: "Proposed"
+depends_on: "spec/01-modulith-foundation.md through spec/06-api-and-deployment.md"
+phase: "7 — Final Verification"
+---
+
 Specification 07: Migration Verification and Completion
-Status: Proposed
-Depends on: spec/01-modulith-foundation.md through spec/06-api-and-deployment.md
-Phase: 7 — Final Verification
 1. Objective
 
 Verify that the Spring Modulith migration satisfies the master specification, preserves required business behavior, and is ready for an approved production cutover.
@@ -273,7 +277,8 @@ Do not assume that application rollback automatically reverses database changes 
 Do not perform production cutover or delete existing production infrastructure without explicit authorization.
 
 13. Acceptance Criteria
-The complete Maven verification suite passes, or remaining failures are explicitly documented and block completion where required.
+The complete Maven verification suite passes with no required tests skipped; FAIL, BLOCKED, or NOT VERIFIED results block completion under the Section 14 status rule.
+Every acceptance criterion is PASS with supporting evidence; any non-PASS criterion blocks completion under the same rule.
 Spring Modulith architecture verification passes.
 All four business modules have verified boundaries.
 Business dependency rules are enforced.
@@ -320,7 +325,7 @@ Rollback readiness.
 Outstanding production risks.
 E. Acceptance criteria matrix
 
-For every acceptance criterion in spec/spring-modulith-migration.md, report:
+For every acceptance criterion in spec/spring-modulith-migration.md and the phase specifications, report:
 
 Criterion.
 Status: PASS, FAIL, BLOCKED, or NOT VERIFIED.
@@ -330,11 +335,13 @@ Remediation required, if applicable.
 
 Do not mark a criterion PASS without supporting evidence.
 
+Completion status rule: every FAIL, BLOCKED, or NOT VERIFIED acceptance criterion MUST block completion, regardless of severity. No completion exceptions are permitted. Documenting a failure, skipped test, limitation, or approval request does not waive this rule; retain the actual status until remediation and passing verification.
+
 15. Definition of Done
 
 The migration is ready for approval only when:
 
-Required acceptance criteria have been verified.
+Every acceptance criterion is PASS with evidence, following the Section 14 completion status rule.
 Required tests pass.
 Architecture constraints are enforced.
 Business behavior and data integrity are preserved.
@@ -343,7 +350,7 @@ Deployment and rollback procedures are documented.
 Outstanding risks are disclosed.
 The final report is complete.
 
-A failed or unverified critical requirement MUST block the claim that the migration is complete.
+Every non-PASS acceptance criterion MUST block the claim that the migration is complete, following the Section 14 completion status rule.
 
 Production cutover and retirement of the original microservices require explicit approval.
 

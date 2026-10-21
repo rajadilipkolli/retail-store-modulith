@@ -70,7 +70,8 @@ Other modules access functionality through documented public module APIs.
 Do not expose repositories, JPA entities, or internal implementation packages across module boundaries.
 Avoid cyclic module dependencies.
 Orders may depend on the public APIs of Catalog, Inventory, and Payments.
-Catalog, Inventory, and Payments must not depend on Orders' internal implementation.
+Catalog, Inventory, and Payments MUST NOT depend on Orders, including its public APIs and events.
+Other modules MUST NOT access Orders' internal implementation.
 Use synchronous module APIs when an immediate result is required.
 Use application events for appropriate notifications and asynchronous work.
 Define transaction boundaries, retries, idempotency, and compensation explicitly.

@@ -1,7 +1,11 @@
+---
+title: "Specification 06: API Compatibility and Deployment"
+status: "Proposed"
+depends_on: "spec/01-modulith-foundation.md, spec/02-catalog-module.md, spec/03-inventory-module.md, spec/04-payments-module.md, spec/05-orders-orchestration.md"
+phase: "6 — API and Deployment Migration"
+---
+
 Specification 06: API Compatibility and Deployment
-Status: Proposed
-Depends on: spec/01-modulith-foundation.md, spec/02-catalog-module.md, spec/03-inventory-module.md, spec/04-payments-module.md, spec/05-orders-orchestration.md
-Phase: 6 — API and Deployment Migration
 1. Objective
 
 Integrate the modular monolith with existing external consumers and provide a documented, repeatable deployment process.

@@ -140,7 +140,7 @@ Run architecture verification after relevant changes.
 
 The intended business modules are Catalog, Inventory, Payments, and Orders.
 
-The intended dependency direction permits Orders to depend on the public APIs of Catalog, Inventory, and Payments. The other modules must not depend on Orders' internal implementation.
+The intended dependency direction permits Orders to depend on the public APIs of Catalog, Inventory, and Payments. Catalog, Inventory, and Payments MUST NOT depend on Orders, including its public APIs and events. Other modules MUST NOT access Orders' internal implementation.
 
 Follow the master specification and approved architecture decisions if the target architecture changes.
 

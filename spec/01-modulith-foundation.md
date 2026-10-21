@@ -1,7 +1,11 @@
+---
+title: "Specification 01: Spring Modulith Foundation"
+status: "Proposed"
+depends_on: "spec/spring-modulith-migration.md"
+phase: "1 — Modulith Foundation"
+---
+
 Specification 01: Spring Modulith Foundation
-Status: Proposed
-Depends on: spec/spring-modulith-migration.md
-Phase: 1 — Modulith Foundation
 1. Objective
 
 Establish the technical foundation for the Spring Modulith application without migrating business behavior prematurely.
