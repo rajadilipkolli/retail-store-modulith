@@ -33,3 +33,5 @@ Before implementation, read:
 - Do not remove existing services or data without approval.
 - Do not claim tests passed unless they were executed successfully.
 - Follow the active phase's acceptance criteria.
+- Shared module rule: Cross-cutting models, common DTOs, and shared abstractions belong in the shared module (OPEN module). If any module needs to reference another module's common contracts, use the shared module.
+- UI module rule: Presentation components, web views, and UI controllers belong in the ui module. Business modules MUST NOT depend on the ui module.

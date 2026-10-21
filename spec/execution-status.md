@@ -23,7 +23,7 @@ A phase with failed or unverified mandatory criteria MUST NOT be marked COMPLETE
 
 3. Phase Overview
 Phase	Specification	Status	Evidence / PR	Approval
-1. Modulith foundation	01-modulith-foundation.md	NOT_STARTED	TBD	Pending
+1. Modulith foundation	01-modulith-foundation.md	IN_PROGRESS	Recorded below	Pending
 2. Catalog module	02-catalog-module.md	NOT_STARTED	TBD	Pending
 3. Inventory module	03-inventory-module.md	NOT_STARTED	TBD	Pending
 4. Payments module	04-payments-module.md	NOT_STARTED	TBD	Pending
@@ -92,6 +92,46 @@ None recorded.
 Decision
 
 Continue, remediate, or request review.
+
+### Phase 1 Evidence Record
+
+Phase 1: Modulith Foundation
+Specification: spec/01-modulith-foundation.md
+Status: IN_PROGRESS
+Started: 2026-10-21
+Completed: TBD
+Implementation PR / commit: Local Working Tree
+Reviewer / approver: Pending User Approval
+
+Acceptance criteria evidence
+
+Criterion	Status	Evidence	Notes
+Existing build and test baselines are recorded	PASS	Recorded initial failure (Missing POM) and baseline inspection	Verified
+Target application has one documented entry point	PASS	RetailStoreModulithApplication.java	Verified
+Module boundaries for business, shared, and UI modules are established	PASS	catalog, inventory, orders, payments, shared, ui package-info.java and facades	Verified
+Spring Modulith dependencies are compatible	PASS	Spring Boot 4.1.1, Modulith 2.1.1, Java 25 in pom.xml	Verified
+Architecture verification runs automatically	PASS	ModulithArchitectureTests.java executes in Maven lifecycle	Verified
+Prohibited module dependencies are detected	PASS	shouldDetectProhibitedModuleDependencies test verified violation detection	Verified
+Existing business services remain intact	PASS	spring-boot-microservices-series-v2 files unchanged	Verified
+No business functionality is falsely reported as migrated	PASS	Only empty facade skeletons and module boundaries added	Verified
+Documentation and relevant architecture decisions are committed	PASS	Documenter documentation generated in target/spring-modulith-docs	Verified
+
+Verification commands
+
+Command	Result	Notes
+python tools/verify-specs.py	PASS	180 checks executed, 0 errors, 0 warnings
+mvn test	PASS	5 tests run, 0 failures, 0 errors
+.\mvnw.cmd clean verify	PASS	Full Maven lifecycle verification succeeded
+
+Outstanding issues
+
+- Container environment: Docker daemon is currently inactive; required later when PostgreSQL/Testcontainers integration tests are introduced in Phases 2-5.
+
+Decision
+
+Phase 1 technical foundation complete with business modules, shared OPEN module, and UI presentation module verified. Ready for user review and approval before proceeding to Phase 2 (Catalog module).
+
+
 7. Blocker Register
 ID	Phase	Description	Owner	Status	Resolution
 B-001	TBD	No blockers recorded	TBD	OPEN	TBD

@@ -55,6 +55,7 @@ Do not implement the entire migration in one task.
    architecture/decisions/	Architecture Decision Records (ADRs)
    tools/verify-specs.py	Specification consistency validator
    .github/workflows/validate-specs.yml	Automated specification validation in GitHub Actions
+   .github/workflows/maven-verify.yml	Automated Maven build and architecture verification in GitHub Actions
 
 If a referenced file is missing, report the problem instead of claiming that its instructions were followed.
 
