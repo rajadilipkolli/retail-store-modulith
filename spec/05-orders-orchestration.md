@@ -64,6 +64,10 @@ Retrieving an order.
 Listing orders where supported.
 Cancelling an order where supported.
 
+Retrieve, list, and cancel operations MUST enforce the caller's authorized customer or tenant scope.
+Create operations MUST verify that the caller may create an order for the supplied customer or tenant.
+External adapters MUST pass the authorized caller context to `OrdersFacade`, and `OrdersFacade` MUST NOT trust an unvalidated customer identifier.
+
 Preserve existing API semantics.
 
 The public API MUST NOT expose persistence entities or repository interfaces.
