@@ -155,9 +155,9 @@ Pricing uses appropriate precise representations	PASS	BigDecimal price with scal
 Every externally consumed Catalog endpoint remains exactly compatible	NOT VERIFIED	Current MockMvc tests cover /api/v1/catalog only	Review-requested zero-based pageNumber and nullable inStock corrections require consumer compatibility evidence and a recorded versioned exception before cutover
 Catalog coexistence, cutover, and rollback enforce a single product write owner and consistent order-time prices	NOT VERIFIED	ProductCreatedEventOutboxIT covers outbox delivery only	Focused evidence for routing, write fencing, data reconciliation, and order-time price consistency is still required
 Liquibase behavior is tested	PASS	db.changelog-master.xml with XML changelogs for schema, table, seed data, and outbox	Tested against Testcontainers PostgreSQL
-Unit and integration tests pass	PASS	Current Linux run: 51 surefire tests + 5 failsafe integration tests (56 total)	0 failures, 0 errors, 0 skipped; includes duplicate-code update conflict and rollback against PostgreSQL
+Unit and integration tests pass	PASS	Current Linux run: 61 surefire tests + 5 failsafe integration tests (66 total)	0 failures, 0 errors, 0 skipped; includes search filters, pagination, sorting, and duplicate-code update conflict and rollback against PostgreSQL
 Spring Modulith architecture verification passes	PASS	ModulithArchitectureTests passes	Package boundaries and dependency restrictions verified
-The complete application builds successfully	FAIL	Current Linux clean verify reaches the JaCoCo check	Tests and Spotless pass; combined unit/integration complexity coverage is 0.77, below the existing 0.80 minimum
+The complete application builds successfully	PASS	Current Linux clean verify succeeds	Tests and Spotless pass; combined unit/integration complexity coverage is 76/86 (88.37%), above the existing 80% minimum
 
 Verification commands
 
@@ -165,12 +165,13 @@ Command	Result	Output / report	Limitations / evidence location
 python tools/verify-specs.py	PASS	Checks executed: 184; Errors: 0; Warnings: 0; RESULT: PASSED; exit 0	Verified specification references and frontmatter
 .\mvnw clean verify	PASS	BUILD SUCCESS; Total time: 01:34 min; exit 0	Spotless check (40 files clean), Surefire: 26 tests run (0 failures), JaCoCo: unit and integration coverage reports generated, Failsafe: 4 tests run (0 failures), Failsafe verify passed
 DOCKER_HOST=unix:///tmp/catalog-review-docker.sock mise exec java@25 -- sh ./mvnw -B -ntp clean verify	FAIL	Run on 2026-10-21; 56 tests passed; exit 1 at JaCoCo check	OpenJDK 25.0.2, Maven 3.10.0; loads test.exec and integrationTest.exec into merged.exec, then rejects complexity coverage 0.77 < 0.80; target/test-results/{test,integrationTest} and workspace validation record contain evidence
+DOCKER_HOST=unix:///home/vercel-sandbox/runtime/catalog-coverage-docker/docker.sock mise exec java@25 -- sh ./mvnw -B -ntp clean verify	PASS	Run on 2026-10-21; 66 tests passed; exit 0	OpenJDK 25.0.2, Maven 3.10.0; Spotless, architecture verification, PostgreSQL/RabbitMQ integration tests, and merged JaCoCo gate pass. Subsequent jacoco:report reads merged.exec: 76/86 complexity paths covered (88.37%); searchProducts and createPageable have no missed branches
 
 Outstanding issues
 
 - Phase 1 remains IN_PROGRESS with approval pending; no approved parallel-work plan is recorded.
 - Catalog routing, write fencing, data reconciliation, and order-time price consistency lack focused verification evidence.
-- The enforced JaCoCo gate fails at 77% combined complexity coverage; the required minimum remains 80%.
+- Resolved: the enforced JaCoCo gate previously failed at 77% combined complexity coverage. Search regression tests raise coverage to 88.37%; the required minimum remains 80%.
 - Phase 2 exit criteria and reviewer approval remain unrecorded. The existing Completed date is retained as historical implementation metadata, not verified phase completion.
 - Requested API corrections make pageNumber zero-based and inStock nullable (null means unknown until Inventory supplies availability); consumer compatibility requires verification before cutover.
 

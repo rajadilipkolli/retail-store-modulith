@@ -33,6 +33,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -43,6 +45,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
@@ -264,8 +267,10 @@ class ProductServiceTest {
                 .isNull();
     }
 
-    @Test
-    void searchProducts_PreservesZeroBasedPageAndUnknownStock() {
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   "})
+    void searchProducts_PreservesZeroBasedPageAndUnknownStock(String term) {
         var page = PageRequest.of(2, 1);
         given(productRepository.findAll(any(Pageable.class)))
                 .willReturn(
@@ -273,11 +278,81 @@ class ProductServiceTest {
                                 List.of(new Product(1L, "P001", "Name", null, null, null)),
                                 page,
                                 4));
-        var result = productService.searchProducts(null, null, null, 2, 1, "id", "asc");
+        var result = productService.searchProducts(term, null, null, 2, 1, "id", "asc");
         assertThat(result.pageNumber()).isEqualTo(2);
         assertThat(result.hasPrevious()).isTrue();
         assertThat(result.hasNext()).isTrue();
         assertThat(result.data().getFirst().inStock()).isNull();
+    }
+
+    @ParameterizedTest
+    @CsvSource({",", "10.00,", ",100.00"})
+    void searchProducts_NameFilterIgnoresIncompletePriceRange(
+            BigDecimal minPrice, BigDecimal maxPrice) {
+        var page = PageRequest.of(0, 10, Sort.by("productName").ascending());
+        var product =
+                new Product(1L, "P001", "Phone", "Description", new BigDecimal("50.00"), "img.jpg");
+        given(productRepository.findByProductNameContainingIgnoreCase("Phone", page))
+                .willReturn(new PageImpl<>(List.of(product), page, 1));
+
+        var result =
+                productService.searchProducts(
+                        " Phone ", minPrice, maxPrice, 0, 10, "productName", "asc");
+
+        assertThat(result.data())
+                .containsExactly(
+                        new ProductResponse(
+                                1L,
+                                "P001",
+                                "Phone",
+                                "Description",
+                                "img.jpg",
+                                new BigDecimal("50.00"),
+                                null));
+        verify(productRepository).findByProductNameContainingIgnoreCase("Phone", page);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   "})
+    void searchProducts_PriceRangeIgnoresBlankTerm(String term) {
+        var minPrice = new BigDecimal("10.00");
+        var maxPrice = new BigDecimal("100.00");
+        var page = PageRequest.of(0, 10, Sort.by("price").ascending());
+        var product = new Product(1L, "P001", "Phone", null, minPrice, null);
+        given(productRepository.findByPriceBetween(minPrice, maxPrice, page))
+                .willReturn(new PageImpl<>(List.of(product), page, 1));
+
+        var result = productService.searchProducts(term, minPrice, maxPrice, 0, 10, "price", "asc");
+
+        assertThat(result.data()).extracting(ProductResponse::productCode).containsExactly("P001");
+        verify(productRepository).findByPriceBetween(minPrice, maxPrice, page);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"desc", "DESC"})
+    void searchProducts_CombinesTrimmedNameAndPriceRangeWithDescendingSort(String sortDir) {
+        var minPrice = new BigDecimal("10.00");
+        var maxPrice = new BigDecimal("100.00");
+        var page = PageRequest.of(1, 1, Sort.by("price").descending());
+        var product = new Product(1L, "P001", "Phone", null, maxPrice, null);
+        given(
+                        productRepository.findByProductNameContainingIgnoreCaseAndPriceBetween(
+                                "Phone", minPrice, maxPrice, page))
+                .willReturn(new PageImpl<>(List.of(product), page, 3));
+
+        var result =
+                productService.searchProducts(
+                        " Phone ", minPrice, maxPrice, 1, 1, "price", sortDir);
+
+        assertThat(result.data()).extracting(ProductResponse::productCode).containsExactly("P001");
+        assertThat(result.pageNumber()).isEqualTo(1);
+        assertThat(result.totalElements()).isEqualTo(3L);
+        assertThat(result.hasPrevious()).isTrue();
+        assertThat(result.hasNext()).isTrue();
+        verify(productRepository)
+                .findByProductNameContainingIgnoreCaseAndPriceBetween(
+                        "Phone", minPrice, maxPrice, page);
     }
 
     @ParameterizedTest
