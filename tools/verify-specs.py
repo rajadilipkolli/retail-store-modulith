@@ -72,6 +72,14 @@ def validate_required_files(self) -> dict[Path, str]:
         *REQUIRED_SKILLS,
         *REQUIRED_AGENT_FILES,
         Path("tools/verify-specs.py"),
+        Path("architecture/decisions/README.md"),
+        Path("architecture/decisions/0000-template.md"),
+        Path("architecture/decisions/0001-module-boundaries.md"),
+        Path("architecture/decisions/0002-module-communication.md"),
+        Path("architecture/decisions/0003-order-processing-workflow.md"),
+        Path("architecture/decisions/0004-event-reliability.md"),
+        Path("architecture/decisions/0005-database-migration-strategy.md"),
+        Path("spec/execution-status.md"),
     ]
 
     for relative_path in required:

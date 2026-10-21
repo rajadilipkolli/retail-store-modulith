@@ -338,15 +338,49 @@ Never claim the complete migration is finished while required acceptance criteri
 
 16. Shared Skills
 
-Before a task, consult relevant skills under ai/skills/.
+Before implementing a task, consult the shared skill relevant to the work.
 
-The initial shared skill is:
+The following skills are required repository files:
 
 ai/skills/spec-driven-development/SKILL.md
+ai/skills/spring-modulith/SKILL.md
+ai/skills/test-driven-development/SKILL.md
+ai/skills/migration-verification/SKILL.md
 
-Additional skills may cover Spring Modulith, test-driven development, database migrations, security, and migration verification.
+Apply them as follows:
 
-Skills provide reusable implementation workflows. They do not override the master specification, approved architecture decisions, or explicit user requirements.
+Spec-driven development: Identify the active specification, prerequisites, acceptance criteria, and evidence required for completion.
+Spring Modulith: Follow module boundaries, public module APIs, event-handling requirements, and architecture verification rules.
+Test-driven development: Write or update appropriate tests before implementing behavior changes where practical. Verify the intended failure and successful result.
+Migration verification: Evaluate acceptance criteria, build and test results, compatibility, data integrity, operational readiness, and outstanding risks.
+
+Skills provide reusable workflows. They MUST NOT override explicit user instructions, applicable security constraints, the master migration specification, or approved architecture decisions.
+
+If a required skill is missing, report the missing prerequisite instead of claiming to have followed it.
+
+When skills conflict, explain the conflict and resolve it consistently with the repository's source-of-truth rules.
+
+Specification Validation
+
+Run the following command after modifying specifications, skills, architecture decision records, or their references:
+
+python3 tools/verify-specs.py
+
+The validation result MUST reflect the command's actual outcome.
+
+A passing specification check does not replace application tests, architecture verification, code review, or migration approval.
+
+Architecture Decision Records
+
+Read relevant ADRs under architecture/decisions/ before making significant architectural changes.
+
+Keep proposed decisions distinct from accepted decisions. Obtain required approval before treating a consequential proposal as accepted.
+
+Phase Execution Tracking
+
+Use spec/execution-status.md to record phase progress and verification evidence.
+
+Do not mark a phase COMPLETE while mandatory acceptance criteria remain failed or unverified. Phase completion does not authorize production cutover.
 
 17. Tool Independence
 

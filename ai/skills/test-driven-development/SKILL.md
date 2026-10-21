@@ -1,6 +1,6 @@
 ---
 name: test-driven-development
-description: Use when implementing new behavior, fixing defects, refactoring code, or adding regression coverage in this repository. Defines a portable test-driven development workflow.
+description: Use when implementing new behavior, fixing defects, refactoring code, or adding regression coverage in this repository.
 ---
 #Test-Driven Development Skill
 1. Purpose
