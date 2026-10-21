@@ -1,5 +1,9 @@
-name: spec-driven-development description: Use when implementing, reviewing, planning, or verifying repository changes governed by specifications, acceptance criteria, migration phases, or architecture requirements. Especially useful for the Spring Modulith migration in this repository.
-Spec-Driven Development Skill
+---
+name: spec-driven-development
+description: Use when implementing, planning, reviewing, or verifying work governed by repository specifications, acceptance criteria, and migration phases.
+---
+
+# Spec-Driven Development Skill
 1. Purpose
 
 Implement software by treating version-controlled specifications as the primary definition of intended behavior and completion criteria.
