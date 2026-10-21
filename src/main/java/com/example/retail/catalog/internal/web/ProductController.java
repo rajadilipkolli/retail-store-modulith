@@ -44,6 +44,12 @@ public class ProductController {
         this.productService = productService;
     }
 
+    /**
+     * Returns HTTP 200 with a zero-based page of products.
+     *
+     * @throws ResponseStatusException with HTTP 400 for a negative page index, a nonpositive page
+     *     size, or an unsupported sort property
+     */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<PagedResult<ProductResponse>> getAllProducts(
             @RequestParam(defaultValue = "0", required = false) int pageNo,
@@ -56,11 +62,19 @@ public class ProductController {
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * Returns HTTP 200 with the product; a missing ID propagates as a product-not-found error
+     * handled as HTTP 404.
+     */
     @GetMapping(value = "/id/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ProductResponse> getProductById(@PathVariable Long id) {
         return ResponseEntity.ok(productService.findProductByIdInternal(id));
     }
 
+    /**
+     * Returns HTTP 200 with the matching product, or propagates a missing-product error handled as
+     * HTTP 404. The compatibility flag {@code fetchInStock} is ignored; stock remains null.
+     */
     @GetMapping(value = "/product-code/{productCode}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ProductResponse> getProductByProductCode(
             @PathVariable String productCode,
@@ -69,6 +83,9 @@ public class ProductController {
                 productService.findProductByProductCode(productCode, fetchInStock));
     }
 
+    /**
+     * Returns HTTP 200 with whether all distinct codes exist; a null or empty list yields false.
+     */
     @GetMapping(value = "/exists", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ProductExistsResponse> productExistsByProductCodes(
             @RequestParam List<String> productCodes) {
@@ -76,6 +93,10 @@ public class ProductController {
         return ResponseEntity.ok(new ProductExistsResponse(exists));
     }
 
+    /**
+     * Creates a product and returns HTTP 201 with its details and a Location header for lookup by
+     * ID. Duplicate-code errors propagate to the exception handler as HTTP 409.
+     */
     @PostMapping(
             consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
@@ -86,6 +107,10 @@ public class ProductController {
         return ResponseEntity.created(location).body(response);
     }
 
+    /**
+     * Replaces the product's editable fields and returns HTTP 200 with the updated details.
+     * Missing-product and duplicate-code errors propagate as HTTP 404 and HTTP 409, respectively.
+     */
     @PutMapping(
             value = "/{id}",
             consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -95,11 +120,22 @@ public class ProductController {
         return ResponseEntity.ok(productService.updateProduct(id, productRequest));
     }
 
+    /**
+     * Deletes the product and returns HTTP 200 with its former details. A missing-product error
+     * propagates as HTTP 404.
+     */
     @DeleteMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ProductResponse> deleteProduct(@PathVariable Long id) {
         return ResponseEntity.ok(productService.deleteProductById(id));
     }
 
+    /**
+     * Returns HTTP 200 with a zero-based page filtered by a trimmed, case-insensitive product-name
+     * term and an inclusive price range. Blank terms and incomplete price ranges are ignored.
+     *
+     * @throws ResponseStatusException with HTTP 400 for a negative page index, a nonpositive page
+     *     size, or an unsupported sort property
+     */
     @GetMapping(value = "/search", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<PagedResult<ProductResponse>> searchProducts(
             @RequestParam(required = false) String term,

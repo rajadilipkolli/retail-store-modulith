@@ -80,6 +80,16 @@ public class ProductService implements CatalogFacade {
     // Internal Web / API Service methods
     // -------------------------------------------------------------------------
 
+    /**
+     * Returns a page of catalog products with unknown (null) stock availability.
+     *
+     * @param pageNo zero-based page index
+     * @param pageSize maximum number of products per page; must be positive
+     * @param sortBy product property to sort by
+     * @param sortDir descending for "desc" (case-insensitive), ascending otherwise
+     * @throws IllegalArgumentException if the page index is negative, the page size is not
+     *     positive, or the sort property is null or blank
+     */
     public PagedResult<ProductResponse> findAllProducts(
             int pageNo, int pageSize, String sortBy, String sortDir) {
         Pageable pageable = createPageable(pageNo, pageSize, sortBy, sortDir);
@@ -87,6 +97,11 @@ public class ProductService implements CatalogFacade {
         return new PagedResult<>(page.map(this::toResponse));
     }
 
+    /**
+     * Returns the product for the web API with unknown (null) stock availability.
+     *
+     * @throws ProductNotFoundException if no product has the supplied ID
+     */
     public ProductResponse findProductByIdInternal(Long id) {
         return productRepository
                 .findById(id)
@@ -96,6 +111,12 @@ public class ProductService implements CatalogFacade {
 
     // fetchInStock is retained for API compatibility; inventory is unknown until supplied by
     // Inventory.
+    /**
+     * Returns the matching product with unknown (null) stock availability.
+     *
+     * @param fetchInStock compatibility flag; currently ignored because Inventory is not queried
+     * @throws ProductNotFoundException if no product has the supplied code
+     */
     public ProductResponse findProductByProductCode(String productCode, boolean fetchInStock) {
         return productRepository
                 .findByProductCode(productCode)
@@ -103,10 +124,20 @@ public class ProductService implements CatalogFacade {
                 .orElseThrow(() -> new ProductNotFoundException(productCode));
     }
 
+    /** Checks all supplied codes using {@link #existsByProductCodes(List)} semantics. */
     public boolean productExistsByProductCodes(List<String> productCodes) {
         return existsByProductCodes(productCodes);
     }
 
+    /**
+     * Creates a product and publishes a {@link ProductCreatedEvent} within the transaction.
+     *
+     * @return the saved product with its assigned ID and unknown (null) stock availability
+     * @throws ProductAlreadyExistsException if the code already exists or saving violates the
+     *     named product-code uniqueness constraint
+     * @throws DataIntegrityViolationException if an integrity failure is not recognized as a
+     *     duplicate product code
+     */
     @Transactional
     public ProductResponse saveProduct(ProductRequest request) {
         if (productRepository.existsByProductCode(request.productCode())) {
@@ -137,6 +168,16 @@ public class ProductService implements CatalogFacade {
         return toResponse(saved);
     }
 
+    /**
+     * Replaces the product's editable fields with the request values, including null values.
+     *
+     * @return the updated product with unknown (null) stock availability
+     * @throws ProductNotFoundException if no product has the supplied ID
+     * @throws ProductAlreadyExistsException if saving violates the named product-code uniqueness
+     *     constraint
+     * @throws DataIntegrityViolationException if an integrity failure is not recognized as a
+     *     duplicate product code
+     */
     @Transactional
     public ProductResponse updateProduct(Long id, ProductRequest request) {
         Product existing =
@@ -153,6 +194,11 @@ public class ProductService implements CatalogFacade {
         return toResponse(updated);
     }
 
+    /**
+     * Deletes the product and returns its former details with unknown (null) stock availability.
+     *
+     * @throws ProductNotFoundException if no product has the supplied ID
+     */
     @Transactional
     public ProductResponse deleteProductById(Long id) {
         Product existing =
@@ -163,6 +209,20 @@ public class ProductService implements CatalogFacade {
         return toResponse(existing);
     }
 
+    /**
+     * Returns products matching the optional name and price filters. A null or blank term is
+     * ignored; otherwise its trimmed value matches a substring of product names without regard to
+     * case. The
+     * inclusive price range applies only when both bounds are supplied. With no active filters,
+     * returns all products. Stock availability is unknown (null).
+     *
+     * @param pageNo zero-based page index
+     * @param pageSize maximum number of products per page; must be positive
+     * @param sortBy product property to sort by
+     * @param sortDir descending for "desc" (case-insensitive), ascending otherwise
+     * @throws IllegalArgumentException if the page index is negative, the page size is not
+     *     positive, or the sort property is null or blank
+     */
     public PagedResult<ProductResponse> searchProducts(
             String term,
             BigDecimal minPrice,
@@ -203,6 +263,11 @@ public class ProductService implements CatalogFacade {
         return PageRequest.of(pageNo, pageSize, sort);
     }
 
+    /**
+     * Saves and flushes the product, translating only the Hibernate constraint named
+     * {@code uc_product_code} into {@link ProductAlreadyExistsException}. Other integrity failures
+     * propagate unchanged.
+     */
     private Product saveAndFlush(Product product) {
         try {
             return productRepository.saveAndFlush(product);

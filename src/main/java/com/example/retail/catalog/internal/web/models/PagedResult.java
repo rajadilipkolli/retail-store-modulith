@@ -21,6 +21,7 @@ public record PagedResult<T>(
         @JsonProperty("hasPrevious") Boolean hasPrevious)
         implements Serializable {
 
+    /** Copies page contents and navigation metadata, preserving the zero-based page number. */
     public PagedResult(Page<T> page) {
         this(
                 page.getContent(),

@@ -15,11 +15,18 @@ import java.util.Optional;
  */
 public interface CatalogFacade {
 
+    /** Returns the matching product, or an empty result when the code is not found. */
     Optional<ProductDto> findProductByCode(String productCode);
 
+    /** Returns the matching product, or an empty result when the ID is not found. */
     Optional<ProductDto> findProductById(Long id);
 
+    /** Checks whether a catalog product exists for the supplied code. */
     boolean existsByProductCode(String productCode);
 
+    /**
+     * Checks whether every distinct supplied code exists in the catalog. Duplicate codes are
+     * ignored; a null or empty list returns false.
+     */
     boolean existsByProductCodes(List<String> productCodes);
 }

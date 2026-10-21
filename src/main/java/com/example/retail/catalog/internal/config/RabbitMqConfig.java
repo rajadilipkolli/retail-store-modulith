@@ -32,6 +32,7 @@ public class RabbitMqConfig {
         return QueueBuilder.durable(CATALOG_EVENTS_QUEUE).build();
     }
 
+    /** Routes messages matching {@code product.*} from the catalog exchange to its events queue. */
     @Bean
     public Binding catalogEventsBinding(Queue catalogEventsQueue, TopicExchange catalogExchange) {
         return BindingBuilder.bind(catalogEventsQueue)
@@ -39,6 +40,7 @@ public class RabbitMqConfig {
                 .with(PRODUCT_ROUTING_KEY_PATTERN);
     }
 
+    /** Creates a JSON converter that trusts types in the shared catalog package. */
     @Bean
     public MessageConverter jsonMessageConverter() {
         return new JacksonJsonMessageConverter("com.example.retail.shared.catalog");

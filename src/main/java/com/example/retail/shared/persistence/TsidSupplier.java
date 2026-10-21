@@ -21,6 +21,7 @@ public class TsidSupplier implements Supplier<TSID.Factory> {
         FACTORY = builder.build();
     }
 
+    /** Returns the shared TSID factory initialized once for this class. */
     @Override
     public TSID.Factory get() {
         return FACTORY;

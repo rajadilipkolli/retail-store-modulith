@@ -30,6 +30,10 @@ public class CatalogExceptionHandler {
         return ex.getBody();
     }
 
+    /**
+     * Converts request validation errors to an HTTP 400 problem with a timestamp and field
+     * violations sorted by field name.
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidationException(MethodArgumentNotValidException ex) {
         ProblemDetail problemDetail =
