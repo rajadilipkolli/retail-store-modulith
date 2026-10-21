@@ -2,7 +2,7 @@
 name: test-driven-development
 description: Use when implementing new behavior, fixing defects, refactoring code, or adding regression coverage in this repository.
 ---
-#Test-Driven Development Skill
+# Test-Driven Development Skill
 1. Purpose
 
 Implement reliable changes through small, testable steps. Tests must verify observable behavior and protect existing business invariants.
