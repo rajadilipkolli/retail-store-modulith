@@ -14,6 +14,8 @@ import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -26,11 +28,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping({"/api/v1/catalog"})
 @Validated
 public class ProductController {
+
+    private static final Set<String> SUPPORTED_SORT_PROPERTIES =
+            Set.of("id", "productCode", "productName", "description", "imageUrl", "price");
 
     private final ProductService productService;
 
@@ -44,6 +50,7 @@ public class ProductController {
             @RequestParam(defaultValue = "10", required = false) int pageSize,
             @RequestParam(defaultValue = "id", required = false) String sortBy,
             @RequestParam(defaultValue = "asc", required = false) String sortDir) {
+        validatePagination(pageNo, pageSize, sortBy);
         PagedResult<ProductResponse> result =
                 productService.findAllProducts(pageNo, pageSize, sortBy, sortDir);
         return ResponseEntity.ok(result);
@@ -102,9 +109,24 @@ public class ProductController {
             @RequestParam(defaultValue = "10", required = false) int pageSize,
             @RequestParam(defaultValue = "id", required = false) String sortBy,
             @RequestParam(defaultValue = "asc", required = false) String sortDir) {
+        validatePagination(pageNo, pageSize, sortBy);
         PagedResult<ProductResponse> result =
                 productService.searchProducts(
                         term, minPrice, maxPrice, pageNo, pageSize, sortBy, sortDir);
         return ResponseEntity.ok(result);
+    }
+
+    private void validatePagination(int pageNo, int pageSize, String sortBy) {
+        if (pageNo < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "pageNo must be non-negative");
+        }
+        if (pageSize <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "pageSize must be positive");
+        }
+        if (!SUPPORTED_SORT_PROPERTIES.contains(sortBy)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Unsupported sortBy property");
+        }
     }
 }

@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.example.retail.catalog.internal.application.ProductService;
 import com.example.retail.catalog.internal.domain.ProductAlreadyExistsException;
@@ -22,6 +23,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -50,7 +54,7 @@ class ProductControllerTest {
                         "Desc",
                         "img.jpg",
                         BigDecimal.valueOf(99.99),
-                        true);
+                        null);
         PagedResult<ProductResponse> pagedResult = new PagedResult<>(new PageImpl<>(List.of(p1)));
 
         given(productService.findAllProducts(0, 10, "id", "asc")).willReturn(pagedResult);
@@ -74,7 +78,7 @@ class ProductControllerTest {
                         "Desc",
                         "img.jpg",
                         BigDecimal.valueOf(99.99),
-                        true);
+                        null);
         given(productService.findProductByIdInternal(1L)).willReturn(response);
 
         assertThat(mockMvcTester.get().uri("/api/v1/catalog/id/1"))
@@ -108,7 +112,7 @@ class ProductControllerTest {
                         "Desc",
                         "img.jpg",
                         BigDecimal.valueOf(99.99),
-                        true);
+                        null);
         given(productService.findProductByProductCode("P001", false)).willReturn(response);
 
         assertThat(mockMvcTester.get().uri("/api/v1/catalog/product-code/P001"))
@@ -145,7 +149,7 @@ class ProductControllerTest {
                         "Desc",
                         "img.jpg",
                         BigDecimal.valueOf(49.99),
-                        true);
+                        null);
         given(productService.saveProduct(any(ProductRequest.class))).willReturn(response);
 
         String json =
@@ -235,7 +239,7 @@ class ProductControllerTest {
                         "Desc",
                         "img.jpg",
                         BigDecimal.valueOf(59.99),
-                        true);
+                        null);
         given(productService.updateProduct(eq(1L), any(ProductRequest.class))).willReturn(response);
 
         String json =
@@ -271,7 +275,7 @@ class ProductControllerTest {
                         "Desc",
                         "img.jpg",
                         BigDecimal.valueOf(99.99),
-                        false);
+                        null);
         given(productService.deleteProductById(1L)).willReturn(response);
 
         assertThat(mockMvcTester.delete().uri("/api/v1/catalog/1"))
@@ -279,5 +283,83 @@ class ProductControllerTest {
                 .bodyJson()
                 .extractingPath("$.productCode")
                 .isEqualTo("P001");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "/api/v1/catalog, pageNo, -1",
+        "/api/v1/catalog, pageSize, 0",
+        "/api/v1/catalog, pageSize, -1",
+        "/api/v1/catalog, sortBy, unknown",
+        "/api/v1/catalog/search, pageNo, -1",
+        "/api/v1/catalog/search, pageSize, 0",
+        "/api/v1/catalog/search, pageSize, -1",
+        "/api/v1/catalog/search, sortBy, unknown"
+    })
+    void invalidPagination_Returns400BeforeCallingService(
+            String uri, String parameter, String value) {
+        assertThat(mockMvcTester.get().uri(uri).param(parameter, value))
+                .hasStatus(HttpStatus.BAD_REQUEST);
+        verifyNoInteractions(productService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void largePageSizeAndSupportedSort_AreAccepted(boolean search) {
+        var result = new PagedResult<ProductResponse>(new PageImpl<>(List.of()));
+        if (search) {
+            given(productService.searchProducts(null, null, null, 0, 100000, "price", "desc"))
+                    .willReturn(result);
+        } else {
+            given(productService.findAllProducts(0, 100000, "price", "desc")).willReturn(result);
+        }
+        assertThat(
+                        mockMvcTester
+                                .get()
+                                .uri(search ? "/api/v1/catalog/search" : "/api/v1/catalog")
+                                .param("pageSize", "100000")
+                                .param("sortBy", "price")
+                                .param("sortDir", "desc"))
+                .hasStatusOk();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void nullProductName_Returns400ForCreateAndUpdate(boolean update) {
+        var request =
+                update
+                        ? mockMvcTester.put().uri("/api/v1/catalog/1")
+                        : mockMvcTester.post().uri("/api/v1/catalog");
+        assertThat(
+                        request.contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"productCode\":\"P001\",\"productName\":null}"))
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson()
+                .extractingPath("$.violations[0].message")
+                .isEqualTo("Product name can't be null");
+        verifyNoInteractions(productService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void nullPrice_RemainsOptionalForCreateAndUpdate(boolean update) {
+        var response = new ProductResponse(1L, "P001", "Name", null, null, null, null);
+        if (update) {
+            given(productService.updateProduct(eq(1L), any(ProductRequest.class)))
+                    .willReturn(response);
+        } else {
+            given(productService.saveProduct(any(ProductRequest.class))).willReturn(response);
+        }
+        var request =
+                update
+                        ? mockMvcTester.put().uri("/api/v1/catalog/1")
+                        : mockMvcTester.post().uri("/api/v1/catalog");
+        assertThat(
+                        request.contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"productCode\":\"P001\",\"productName\":\"Name\"}"))
+                .hasStatus(update ? HttpStatus.OK : HttpStatus.CREATED)
+                .bodyJson()
+                .extractingPath("$.inStock")
+                .isNull();
     }
 }

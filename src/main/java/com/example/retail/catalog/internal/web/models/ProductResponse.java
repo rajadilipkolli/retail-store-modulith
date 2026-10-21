@@ -9,6 +9,12 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import java.io.Serializable;
 import java.math.BigDecimal;
 
+/**
+ * Catalog response.
+ *
+ * @param inStock unknown (null) until the Inventory API supplies availability; never inferred from
+ *     a request flag
+ */
 public record ProductResponse(
         @JsonFormat(shape = JsonFormat.Shape.STRING) Long id,
         String productCode,
@@ -16,19 +22,5 @@ public record ProductResponse(
         String description,
         String imageUrl,
         @JsonFormat(shape = JsonFormat.Shape.NUMBER_FLOAT, pattern = "0.00") BigDecimal price,
-        boolean inStock)
-        implements Serializable {
-
-    public ProductResponse withInStock(final boolean inStock) {
-        return this.inStock == inStock
-                ? this
-                : new ProductResponse(
-                        this.id,
-                        this.productCode,
-                        this.productName,
-                        this.description,
-                        this.imageUrl,
-                        this.price,
-                        inStock);
-    }
-}
+        Boolean inStock)
+        implements Serializable {}

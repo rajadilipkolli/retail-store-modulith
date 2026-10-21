@@ -41,7 +41,6 @@ public class RabbitMqConfig {
 
     @Bean
     public MessageConverter jsonMessageConverter() {
-        return new JacksonJsonMessageConverter(
-                "com.example.retail.shared.catalog.ProductCreatedEvent");
+        return new JacksonJsonMessageConverter("com.example.retail.shared.catalog");
     }
 }

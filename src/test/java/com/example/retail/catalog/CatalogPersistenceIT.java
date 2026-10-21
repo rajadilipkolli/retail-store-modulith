@@ -13,6 +13,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 
 @SpringBootTest
@@ -68,5 +70,28 @@ class CatalogPersistenceIT {
                         .param("productCodes", "P001", "NON_EXISTING");
         assertThat(notExistsResult).hasStatusOk();
         assertThat(notExistsResult).bodyJson().extractingPath("$.exists").isEqualTo(false);
+    }
+
+    @Test
+    @DisplayName("Changing a product code to an existing code returns 409 and rolls back")
+    void duplicateCodeUpdate_ReturnsConflictAndPreservesProduct() {
+        assertThat(
+                        mockMvcTester
+                                .put()
+                                .uri("/api/v1/catalog/2")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                        {"productCode":"P001", "productName":"Duplicate", "price":12.50}
+                        """))
+                .hasStatus(HttpStatus.CONFLICT)
+                .bodyJson()
+                .extractingPath("$.title")
+                .isEqualTo("Product Already Exists");
+        assertThat(mockMvcTester.get().uri("/api/v1/catalog/id/2"))
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.productCode")
+                .isEqualTo("P002");
     }
 }

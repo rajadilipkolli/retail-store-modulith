@@ -16,11 +16,15 @@ import com.example.retail.catalog.internal.web.models.ProductResponse;
 import com.example.retail.shared.catalog.ProductCreatedEvent;
 import com.example.retail.shared.catalog.ProductDto;
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -67,8 +71,9 @@ public class ProductService implements CatalogFacade {
         if (productCodes == null || productCodes.isEmpty()) {
             return false;
         }
-        long count = productRepository.countByProductCodeIn(productCodes);
-        return count == productCodes.size();
+        Set<String> distinctCodes = new HashSet<>(productCodes);
+        long count = productRepository.countByProductCodeIn(distinctCodes);
+        return count == distinctCodes.size();
     }
 
     // -------------------------------------------------------------------------
@@ -79,20 +84,22 @@ public class ProductService implements CatalogFacade {
             int pageNo, int pageSize, String sortBy, String sortDir) {
         Pageable pageable = createPageable(pageNo, pageSize, sortBy, sortDir);
         Page<Product> page = productRepository.findAll(pageable);
-        return new PagedResult<>(page.map(p -> toResponse(p, true)));
+        return new PagedResult<>(page.map(this::toResponse));
     }
 
     public ProductResponse findProductByIdInternal(Long id) {
         return productRepository
                 .findById(id)
-                .map(p -> toResponse(p, true))
+                .map(this::toResponse)
                 .orElseThrow(() -> new ProductNotFoundException(id));
     }
 
+    // fetchInStock is retained for API compatibility; inventory is unknown until supplied by
+    // Inventory.
     public ProductResponse findProductByProductCode(String productCode, boolean fetchInStock) {
         return productRepository
                 .findByProductCode(productCode)
-                .map(p -> toResponse(p, fetchInStock))
+                .map(this::toResponse)
                 .orElseThrow(() -> new ProductNotFoundException(productCode));
     }
 
@@ -113,7 +120,7 @@ public class ProductService implements CatalogFacade {
         product.setImageUrl(request.imageUrl());
         product.setPrice(request.price());
 
-        Product saved = productRepository.save(product);
+        Product saved = saveAndFlush(product);
         log.info("Saved product: id={}, code={}", saved.getId(), saved.getProductCode());
 
         // Publish event for RabbitMQ outbox publishing
@@ -127,7 +134,7 @@ public class ProductService implements CatalogFacade {
         eventPublisher.publishEvent(event);
         log.info("Published ProductCreatedEvent for productCode={}", saved.getProductCode());
 
-        return toResponse(saved, true);
+        return toResponse(saved);
     }
 
     @Transactional
@@ -141,9 +148,9 @@ public class ProductService implements CatalogFacade {
         existing.setImageUrl(request.imageUrl());
         existing.setPrice(request.price());
 
-        Product updated = productRepository.save(existing);
+        Product updated = saveAndFlush(existing);
         log.info("Updated product: id={}, code={}", updated.getId(), updated.getProductCode());
-        return toResponse(updated, true);
+        return toResponse(updated);
     }
 
     @Transactional
@@ -153,7 +160,7 @@ public class ProductService implements CatalogFacade {
 
         productRepository.delete(existing);
         log.info("Deleted product: id={}, code={}", existing.getId(), existing.getProductCode());
-        return toResponse(existing, false);
+        return toResponse(existing);
     }
 
     public PagedResult<ProductResponse> searchProducts(
@@ -181,7 +188,7 @@ public class ProductService implements CatalogFacade {
             page = productRepository.findAll(pageable);
         }
 
-        return new PagedResult<>(page.map(p -> toResponse(p, true)));
+        return new PagedResult<>(page.map(this::toResponse));
     }
 
     // -------------------------------------------------------------------------
@@ -196,7 +203,21 @@ public class ProductService implements CatalogFacade {
         return PageRequest.of(pageNo, pageSize, sort);
     }
 
-    private ProductResponse toResponse(Product product, boolean inStock) {
+    private Product saveAndFlush(Product product) {
+        try {
+            return productRepository.saveAndFlush(product);
+        } catch (DataIntegrityViolationException ex) {
+            for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+                if (cause instanceof ConstraintViolationException constraintViolation
+                        && "uc_product_code".equals(constraintViolation.getConstraintName())) {
+                    throw new ProductAlreadyExistsException(product.getProductCode());
+                }
+            }
+            throw ex;
+        }
+    }
+
+    private ProductResponse toResponse(Product product) {
         return new ProductResponse(
                 product.getId(),
                 product.getProductCode(),
@@ -204,7 +225,7 @@ public class ProductService implements CatalogFacade {
                 product.getDescription(),
                 product.getImageUrl(),
                 product.getPrice(),
-                inStock);
+                null);
     }
 
     private ProductDto toDto(Product product) {
