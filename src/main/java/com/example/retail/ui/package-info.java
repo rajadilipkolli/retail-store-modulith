@@ -5,7 +5,7 @@
  */
 @ApplicationModule(
     displayName = "UI",
-    allowedDependencies = {"catalog", "inventory", "orders", "payments"}
+    allowedDependencies = {"catalog", "inventory", "orders", "payments", "shared"}
 )
 package com.example.retail.ui;
 

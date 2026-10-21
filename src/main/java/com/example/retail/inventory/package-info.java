@@ -3,7 +3,7 @@
  *
  * <p>Responsible for stock availability, reservations, and releases.
  */
-@ApplicationModule(displayName = "Inventory")
+@ApplicationModule(displayName = "Inventory", allowedDependencies = {"shared", "catalog"})
 package com.example.retail.inventory;
 
 import org.springframework.modulith.ApplicationModule;
