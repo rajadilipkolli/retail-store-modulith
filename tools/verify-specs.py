@@ -16,8 +16,12 @@ MASTER_SPEC = Path("spec/spring-modulith-migration.md")
 
 PHASE_SPECS = [ Path("spec/01-modulith-foundation.md"), Path("spec/02-catalog-module.md"), Path("spec/03-inventory-module.md"), Path("spec/04-payments-module.md"), Path("spec/05-orders-orchestration.md"), Path("spec/06-api-and-deployment.md"), Path("spec/07-migration-verification.md"), ]
 
-REQUIRED_SKILLS = [ Path("ai/skills/spec-driven-development/SKILL.md"), Path("ai/skills/spring-modulith/SKILL.md"), ]
-
+REQUIRED_SKILLS = [
+    Path("ai/skills/spec-driven-development/SKILL.md"),
+    Path("ai/skills/spring-modulith/SKILL.md"),
+    Path("ai/skills/test-driven-development/SKILL.md"),
+    Path("ai/skills/migration-verification/SKILL.md"),
+]
 REQUIRED_AGENT_FILES = [ Path("AGENTS.md"), Path("GEMINI.md"), ]
 
 ACCEPTANCE_HEADING = re.compile( r"^#{1,6}\s+.\bacceptance\s+criteria\b.$", re.IGNORECASE | re.MULTILINE, )

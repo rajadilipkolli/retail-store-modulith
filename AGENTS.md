@@ -19,6 +19,45 @@ Relevant architecture decision records and approved design decisions.
 Existing implementation and tests, which provide evidence of current behavior.
 Shared engineering instructions and skills.
 
+Architecture Decision Records
+
+Architecture decisions are maintained under architecture/decisions/.
+
+Before making a significant architectural change:
+
+Read relevant accepted ADRs.
+Check whether a proposed ADR already covers the decision.
+Create a new ADR using architecture/decisions/0000-template.md when needed.
+Keep proposed decisions distinct from accepted decisions.
+Obtain required approval before treating a consequential proposal as accepted.
+Create a new ADR when superseding an accepted decision; preserve the old record.
+
+Use architecture/decisions/README.md for naming, status, and review conventions.
+
+Migration Phase Tracking
+
+Track migration progress in spec/execution-status.md.
+
+Update statuses using the documented status definitions.
+Record actual test results and evidence.
+Do not mark a phase COMPLETE until its mandatory acceptance criteria and exit criteria are verified.
+Record blockers and unresolved decisions.
+Do not treat phase status as authorization for production deployment or cutover.
+Additional Shared Skills
+
+Consult the relevant skill before performing the associated work:
+
+ai/skills/spec-driven-development/SKILL.md: specification-driven implementation and acceptance criteria.
+ai/skills/spring-modulith/SKILL.md: module boundaries and Spring Modulith architecture.
+ai/skills/test-driven-development/SKILL.md: test-first development and regression coverage.
+ai/skills/migration-verification/SKILL.md: migration evidence, compatibility, and readiness verification.
+
+When specifications, skills, or ADRs change, run:
+
+python3 tools/verify-specs.py
+
+Report any validation errors and actual test outcomes.
+
 If two requirements conflict, do not silently choose one. Explain the conflict and request clarification when the correct resolution cannot be determined safely.
 
 Existing implementation details MUST NOT override an explicitly approved target requirement, but existing business behavior MUST be preserved unless a change is authorized.
