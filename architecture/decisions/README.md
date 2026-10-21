@@ -16,6 +16,8 @@ Examples:
 0001-module-boundaries.md
 0002-module-communication.md
 0003-order-processing-workflow.md
+0004-event-reliability.md
+0005-database-migration-strategy.md
 
 Use sequential numbers. Do not reuse a number, even when an ADR is superseded.
 
