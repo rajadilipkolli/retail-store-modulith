@@ -34,7 +34,7 @@ Create a new Spring Boot application for the modular monolith.
 Requirements:
 
 Use the repository's existing package conventions where practical.
-Use Java 21 unless repository inspection establishes an approved alternative.
+Use Java 25 unless repository inspection establishes an approved alternative.
 Use Maven and existing dependency-management conventions.
 Select a Spring Modulith release compatible with the existing Spring Boot version.
 Avoid unrelated dependency upgrades.

@@ -5,7 +5,7 @@ type: "Architecture Migration"
 approach: "Specification-Driven Development (SDD)"
 repository: "rajadilipkolli/spring-boot-microservices-series-v2"
 target_architecture: "Spring Boot Modular Monolith"
-initial_java_baseline: "Java 21, subject to repository verification"
+initial_java_baseline: "Java 25, subject to repository verification"
 build_system: "Maven"
 ---
 
