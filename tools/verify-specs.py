@@ -1,12 +1,18 @@
-#!/usr/bin/env python3 """ Validate specification-driven development files in this repository.
+#!/usr/bin/env python3
+"""
+Validate specification-driven development files in this repository.
 
-Usage: python3 tools/verify-specs.py
+Usage:
+    python3 tools/verify-specs.py
 
 No third-party Python packages are required.
 
-Exit codes: 0 - Validation passed. 1 - Validation errors found. """
+Exit codes:
+    0 - Validation passed.
+    1 - Validation errors found.
+"""
 
-from future import annotations
+from __future__ import annotations
 
 import re import sys from pathlib import Path from collections import defaultdict, deque
 
