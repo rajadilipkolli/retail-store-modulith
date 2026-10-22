@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="insert-sample-inventory" author="system" context="sample-data">
+        <!-- Accept the original seed checksum without rerunning it or changing existing stock. -->
+        <validCheckSum>9:3cab2f368c06fdf980755648e3df99a0</validCheckSum>
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">SELECT COUNT(*) FROM inventory.inventory WHERE product_code = 'P001'</sqlCheck>
+        </preConditions>
+        <insert schemaName="inventory" tableName="inventory">
+            <column name="id" valueNumeric="1"/>
+            <column name="product_code" value="P001"/>
+            <column name="quantity" valueNumeric="50000"/>
+            <column name="reserved_items" valueNumeric="0"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="inventory" tableName="inventory">
+            <column name="id" valueNumeric="2"/>
+            <column name="product_code" value="P002"/>
+            <column name="quantity" valueNumeric="30"/>
+            <column name="reserved_items" valueNumeric="0"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="inventory" tableName="inventory">
+            <column name="id" valueNumeric="3"/>
+            <column name="product_code" value="P003"/>
+            <column name="quantity" valueNumeric="25"/>
+            <column name="reserved_items" valueNumeric="0"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="inventory" tableName="inventory">
+            <column name="id" valueNumeric="4"/>
+            <column name="product_code" value="P004"/>
+            <column name="quantity" valueNumeric="10"/>
+            <column name="reserved_items" valueNumeric="0"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="inventory" tableName="inventory">
+            <column name="id" valueNumeric="5"/>
+            <column name="product_code" value="P005"/>
+            <column name="quantity" valueNumeric="100"/>
+            <column name="reserved_items" valueNumeric="0"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+    </changeSet>
+
+</databaseChangeLog>

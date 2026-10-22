@@ -17,7 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 
-@SpringBootTest
+@SpringBootTest(properties = "spring.liquibase.contexts=sample-data")
 @AutoConfigureMockMvc
 @Import(ContainersConfig.class)
 class CatalogPersistenceIT {

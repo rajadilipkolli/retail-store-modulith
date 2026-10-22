@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="createTable-inventory-reservations" author="rajakolli">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="inventory" tableName="inventory_reservations"/>
+            </not>
+        </preConditions>
+        <createTable schemaName="inventory" tableName="inventory_reservations">
+            <column name="id" type="BIGINT">
+                <constraints primaryKey="true" primaryKeyName="pk_inventory_reservations" nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="VARCHAR(255)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uc_inv_res_idempotency_key"/>
+            </column>
+            <column name="order_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="items_json" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="SMALLINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="createIndex-inventory-reservations-order-id" author="rajakolli">
+        <createIndex schemaName="inventory" tableName="inventory_reservations" indexName="idx_inv_res_order_id">
+            <column name="order_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
