@@ -23,7 +23,10 @@ public class OrderStreamListener {
         this.orderStreamStoreService = orderStreamStoreService;
     }
 
-    @RabbitListener(queues = RabbitMqOrdersConfig.ORDERS_STREAM_QUEUE)
+    @RabbitListener(
+            id = "orderStreamListener",
+            queues = RabbitMqOrdersConfig.ORDERS_STREAM_QUEUE,
+            containerFactory = "orderStreamListenerContainerFactory")
     public void handleOrderStreamMessage(OrderDto orderDto) {
         log.info(
                 "Received order from RabbitMQ stream: id={}, status={}",

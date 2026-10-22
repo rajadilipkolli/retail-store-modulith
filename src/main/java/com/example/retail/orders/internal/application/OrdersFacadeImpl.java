@@ -8,7 +8,6 @@ package com.example.retail.orders.internal.application;
 import com.example.retail.catalog.CatalogFacade;
 import com.example.retail.inventory.InventoryFacade;
 import com.example.retail.orders.OrdersFacade;
-import com.example.retail.orders.internal.config.RabbitMqOrdersConfig;
 import com.example.retail.orders.internal.domain.IdempotencyConflictException;
 import com.example.retail.orders.internal.domain.Order;
 import com.example.retail.orders.internal.domain.OrderIdempotency;
@@ -17,10 +16,8 @@ import com.example.retail.orders.internal.domain.OrderNotFoundException;
 import com.example.retail.orders.internal.domain.OrderStatus;
 import com.example.retail.orders.internal.persistence.OrderIdempotencyRepository;
 import com.example.retail.orders.internal.persistence.OrderRepository;
-import com.example.retail.orders.internal.stream.OrderStreamStoreService;
 import com.example.retail.payments.PaymentsFacade;
 import com.example.retail.shared.inventory.InventoryReservationRequest;
-import com.example.retail.shared.inventory.InventoryReservationResult;
 import com.example.retail.shared.inventory.InventoryReservationStatus;
 import com.example.retail.shared.inventory.ReservationItem;
 import com.example.retail.shared.models.PagedResult;
@@ -32,7 +29,6 @@ import com.example.retail.shared.orders.OrderRequest;
 import com.example.retail.shared.orders.OrderResponse;
 import com.example.retail.shared.payments.PaymentRefundRequest;
 import com.example.retail.shared.payments.PaymentReservationRequest;
-import com.example.retail.shared.payments.PaymentResult;
 import com.example.retail.shared.payments.PaymentStatus;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -45,15 +41,18 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
@@ -68,9 +67,8 @@ public class OrdersFacadeImpl implements OrdersFacade {
     private final PaymentsFacade paymentsFacade;
     private final OrderRequestFingerprinter fingerprinter;
     private final ApplicationEventPublisher eventPublisher;
-    private final RabbitTemplate rabbitTemplate;
+    private final TransactionTemplate transactions;
     private final ObjectMapper objectMapper;
-    private final OrderStreamStoreService streamStoreService;
 
     public OrdersFacadeImpl(
             OrderRepository orderRepository,
@@ -80,9 +78,8 @@ public class OrdersFacadeImpl implements OrdersFacade {
             PaymentsFacade paymentsFacade,
             OrderRequestFingerprinter fingerprinter,
             ApplicationEventPublisher eventPublisher,
-            RabbitTemplate rabbitTemplate,
             ObjectMapper objectMapper,
-            OrderStreamStoreService streamStoreService) {
+            PlatformTransactionManager transactionManager) {
         this.orderRepository = orderRepository;
         this.idempotencyRepository = idempotencyRepository;
         this.catalogFacade = catalogFacade;
@@ -90,223 +87,281 @@ public class OrdersFacadeImpl implements OrdersFacade {
         this.paymentsFacade = paymentsFacade;
         this.fingerprinter = fingerprinter;
         this.eventPublisher = eventPublisher;
-        this.rabbitTemplate = rabbitTemplate;
+        this.transactions = new TransactionTemplate(transactionManager);
+        this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.objectMapper = objectMapper;
-        this.streamStoreService = streamStoreService;
     }
 
     @Override
-    @Transactional
     public OrderResponse createOrder(OrderRequest request, String idempotencyKey) {
-        if (request == null) {
-            throw new IllegalArgumentException("OrderRequest must not be null");
+        if (request == null
+                || request.customerId() == null
+                || request.customerId() <= 0
+                || request.items() == null
+                || request.items().isEmpty()
+                || request.deliveryAddress() == null) {
+            throw new IllegalArgumentException("Customer, items and delivery address are required");
         }
-        if (request.customerId() == null || request.customerId() <= 0) {
-            throw new IllegalArgumentException("CustomerId must be positive");
-        }
-        if (request.items() == null || request.items().isEmpty()) {
-            throw new IllegalArgumentException("Order items cannot be empty");
-        }
-
-        String effectiveKey =
-                (idempotencyKey != null && !idempotencyKey.isBlank())
-                        ? idempotencyKey.trim()
-                        : UUID.randomUUID().toString();
-
+        String key =
+                idempotencyKey == null || idempotencyKey.isBlank()
+                        ? UUID.randomUUID().toString()
+                        : idempotencyKey.trim();
         String fingerprint = fingerprinter.computeFingerprint(request);
-
-        // 1. Check idempotency claim
-        Optional<OrderIdempotency> existingOpt =
-                idempotencyRepository.findByCustomerIdAndIdempotencyKey(
-                        request.customerId(), effectiveKey);
-
-        OrderIdempotency idempotencyRecord;
-        if (existingOpt.isPresent()) {
-            OrderIdempotency existing = existingOpt.get();
-            if (OrderIdempotency.STATUS_COMPLETED.equals(existing.getStatus())) {
-                if (!fingerprint.equals(existing.getRequestFingerprint())) {
-                    throw new IdempotencyConflictException(
-                            "Idempotency key '"
-                                    + effectiveKey
-                                    + "' was already used for a different order request");
-                }
-                if (existing.getResponsePayload() != null) {
-                    try {
-                        return objectMapper.readValue(
-                                existing.getResponsePayload(), OrderResponse.class);
-                    } catch (Exception e) {
-                        log.warn("Failed to deserialize cached response payload", e);
-                    }
-                }
-                return findOrderById(existing.getOrderId())
-                        .orElseThrow(() -> new OrderNotFoundException(existing.getOrderId()));
-            } else if (OrderIdempotency.STATUS_PROCESSING.equals(existing.getStatus())) {
-                throw new IdempotencyConflictException(
-                        "Order creation for key '" + effectiveKey + "' is already in progress");
-            } else {
-                // Previously failed attempt: reset to PROCESSING
-                existing.setStatus(OrderIdempotency.STATUS_PROCESSING);
-                existing.setRequestFingerprint(fingerprint);
-                existing.setLastModifiedDate(LocalDateTime.now());
-                try {
-                    idempotencyRecord = idempotencyRepository.saveAndFlush(existing);
-                } catch (DataIntegrityViolationException e) {
-                    throw new IdempotencyConflictException(
-                            "Order creation for key '" + effectiveKey + "' is already in progress");
-                }
-            }
-        } else {
-            OrderIdempotency newRecord =
-                    new OrderIdempotency()
-                            .setCustomerId(request.customerId())
-                            .setIdempotencyKey(effectiveKey)
-                            .setRequestFingerprint(fingerprint)
-                            .setStatus(OrderIdempotency.STATUS_PROCESSING)
-                            .setCreatedDate(LocalDateTime.now());
-            try {
-                idempotencyRecord = idempotencyRepository.saveAndFlush(newRecord);
-            } catch (DataIntegrityViolationException e) {
-                throw new IdempotencyConflictException(
-                        "Order creation for key '" + effectiveKey + "' is already in progress");
-            }
+        OrderIdempotency claim;
+        try {
+            claim = transactions.execute(tx -> claimOrder(request, key, fingerprint));
+        } catch (DataIntegrityViolationException ex) {
+            throw new IdempotencyConflictException(
+                    "Order creation for key '" + key + "' is already in progress");
         }
+        SagaResult result = process(claim.getId());
+        if (result.failure() != null) {
+            try {
+                process(claim.getId()); // Compensation commits independently of the failed
+                // reservation.
+            } catch (RuntimeException compensationFailure) {
+                result.failure().addSuppressed(compensationFailure);
+            }
+            throw result.failure();
+        }
+        return result.response();
+    }
 
-        // 2. Validate customer existence
+    private OrderIdempotency claimOrder(OrderRequest request, String key, String fingerprint) {
+        var existing =
+                idempotencyRepository.findByCustomerIdAndIdempotencyKey(request.customerId(), key);
+        if (existing.isPresent()) {
+            OrderIdempotency claim = existing.get();
+            if (!fingerprint.equals(claim.getRequestFingerprint())) {
+                throw new IdempotencyConflictException(
+                        "Idempotency key was already used for a different order request");
+            }
+            if (!OrderIdempotency.STATUS_COMPLETED.equals(claim.getStatus())) {
+                throw new IdempotencyConflictException(
+                        "Order creation for key '" + key + "' is " + claim.getStatus());
+            }
+            return claim;
+        }
         if (paymentsFacade.findCustomerById(request.customerId()).isEmpty()) {
-            idempotencyRecord.setStatus(OrderIdempotency.STATUS_FAILED);
-            idempotencyRepository.save(idempotencyRecord);
             throw new IllegalArgumentException(
                     "Customer with id " + request.customerId() + " does not exist");
         }
-
-        // 3. Validate products and calculate total price
-        BigDecimal total = BigDecimal.ZERO;
-        for (OrderItemRequest item : request.items()) {
-            if (!catalogFacade.existsByProductCode(item.productCode())) {
-                idempotencyRecord.setStatus(OrderIdempotency.STATUS_FAILED);
-                idempotencyRepository.save(idempotencyRecord);
-                throw new IllegalArgumentException(
-                        "Product with code '" + item.productCode() + "' does not exist in catalog");
-            }
-            BigDecimal unitPrice =
-                    item.productPrice() != null ? item.productPrice() : BigDecimal.ZERO;
-            total = total.add(unitPrice.multiply(BigDecimal.valueOf(item.quantity())));
-        }
-        BigDecimal totalPrice = total.setScale(2, RoundingMode.HALF_UP);
-
-        // 4. Pre-commit order with status NEW
         Order order =
                 new Order()
                         .setCustomerId(request.customerId())
                         .setStatus(OrderStatus.NEW)
                         .setSource("WEB")
                         .setDeliveryAddress(request.deliveryAddress())
-                        .setTotalPrice(totalPrice)
                         .setCreatedDate(LocalDateTime.now())
                         .setCreatedBy("system");
-
+        BigDecimal total = BigDecimal.ZERO;
         for (OrderItemRequest item : request.items()) {
-            OrderItem orderItem =
+            if (item == null || item.quantity() <= 0) {
+                throw new IllegalArgumentException("Order quantities must be positive");
+            }
+            BigDecimal price =
+                    catalogFacade
+                            .findProductByCode(item.productCode())
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalArgumentException(
+                                                    "Product with code '"
+                                                            + item.productCode()
+                                                            + "' does not exist in catalog"))
+                            .price();
+            order.addOrderItem(
                     new OrderItem()
                             .setProductCode(item.productCode())
                             .setQuantity(item.quantity())
-                            .setProductPrice(item.productPrice());
-            order.addOrderItem(orderItem);
+                            .setProductPrice(price));
+            total = total.add(price.multiply(BigDecimal.valueOf(item.quantity())));
         }
+        order.setTotalPrice(total.setScale(2, RoundingMode.HALF_UP));
+        orderRepository.save(order);
+        return idempotencyRepository.saveAndFlush(
+                new OrderIdempotency()
+                        .setCustomerId(request.customerId())
+                        .setIdempotencyKey(key)
+                        .setRequestFingerprint(fingerprint)
+                        .setOrderId(order.getId())
+                        .setOperationKey(operationKey(order.getId()))
+                        .setStatus(OrderIdempotency.STATUS_PROCESSING)
+                        .setCreatedDate(LocalDateTime.now()));
+    }
 
-        Order savedOrder = orderRepository.save(order);
-        idempotencyRecord.setOrderId(savedOrder.getId());
-        idempotencyRepository.save(idempotencyRecord);
+    private record SagaResult(OrderResponse response, RuntimeException failure) {}
 
-        // 5. Reserve Inventory
-        List<ReservationItem> reservationItems =
-                request.items().stream()
-                        .map(item -> new ReservationItem(item.productCode(), item.quantity()))
-                        .toList();
-        InventoryReservationRequest invReq =
-                new InventoryReservationRequest(effectiveKey, savedOrder.getId(), reservationItems);
-        InventoryReservationResult invResult;
-        try {
-            invResult = inventoryFacade.reserve(invReq);
-        } catch (RuntimeException ex) {
-            if ("IdempotencyConflictException".equals(ex.getClass().getSimpleName())) {
-                throw new IdempotencyConflictException(
-                        "Order creation for key '" + effectiveKey + "' is already in progress");
+    private SagaResult process(Long claimId) {
+        return transactions.execute(
+                tx -> {
+                    // Serialize checkout, recovery and cancellation across all application
+                    // instances.
+                    OrderIdempotency claim =
+                            idempotencyRepository.findLockedById(claimId).orElseThrow();
+                    Order order =
+                            orderRepository
+                                    .findOrderById(claim.getOrderId())
+                                    .orElseThrow(
+                                            () -> new OrderNotFoundException(claim.getOrderId()));
+                    String key =
+                            claim.getOperationKey() != null
+                                    ? claim.getOperationKey()
+                                    : claim.getIdempotencyKey();
+                    if (OrderIdempotency.STATUS_COMPLETED.equals(claim.getStatus())) {
+                        return new SagaResult(
+                                claim.getResponsePayload() == null
+                                        ? toOrderResponse(order)
+                                        : objectMapper.readValue(
+                                                claim.getResponsePayload(), OrderResponse.class),
+                                null);
+                    }
+                    if (OrderIdempotency.STATUS_CANCELLING.equals(claim.getStatus())
+                            || OrderIdempotency.STATUS_COMPENSATING.equals(claim.getStatus())) {
+                        compensate(order, key);
+                        boolean cancelling =
+                                OrderIdempotency.STATUS_CANCELLING.equals(claim.getStatus());
+                        order.setStatus(cancelling ? OrderStatus.ROLLBACK : OrderStatus.FAILED);
+                        claim.setStatus(
+                                cancelling
+                                        ? OrderIdempotency.STATUS_COMPLETED
+                                        : OrderIdempotency.STATUS_FAILED);
+                        if (cancelling) {
+                            if (claim.getResponsePayload() == null) {
+                                claim.setResponsePayload(
+                                        objectMapper.writeValueAsString(toOrderResponse(order)));
+                            }
+                            eventPublisher.publishEvent(toOrderDto(order));
+                        }
+                        orderRepository.save(order);
+                        idempotencyRepository.save(claim);
+                        return new SagaResult(toOrderResponse(order), null);
+                    }
+                    if (OrderIdempotency.STATUS_FAILED.equals(claim.getStatus())) {
+                        return new SagaResult(toOrderResponse(order), null);
+                    }
+                    String source = "INVENTORY";
+                    try {
+                        var inventory =
+                                transactions.execute(
+                                        step ->
+                                                inventoryFacade.reserve(
+                                                        new InventoryReservationRequest(
+                                                                key,
+                                                                order.getId(),
+                                                                order.getItems().stream()
+                                                                        .map(
+                                                                                item ->
+                                                                                        new ReservationItem(
+                                                                                                item
+                                                                                                        .getProductCode(),
+                                                                                                item
+                                                                                                        .getQuantity()))
+                                                                        .toList())));
+                        if (inventory.status() != InventoryReservationStatus.RESERVED
+                                && inventory.status() != InventoryReservationStatus.CONSUMED) {
+                            throw new IllegalArgumentException(
+                                    "Inventory reservation failed: " + inventory.message());
+                        }
+                        source = "PAYMENT";
+                        var payment =
+                                transactions.execute(
+                                        step ->
+                                                paymentsFacade.reserve(
+                                                        new PaymentReservationRequest(
+                                                                key,
+                                                                order.getId(),
+                                                                order.getCustomerId(),
+                                                                order.getTotalPrice(),
+                                                                "USD")));
+                        if (payment.status() != PaymentStatus.RESERVED
+                                && payment.status() != PaymentStatus.CONFIRMED) {
+                            throw new IllegalArgumentException(
+                                    "Payment reservation failed: " + payment.message());
+                        }
+                    } catch (RuntimeException ex) {
+                        order.setStatus(OrderStatus.FAILED).setSource(source);
+                        orderRepository.save(order);
+                        claim.setStatus(OrderIdempotency.STATUS_COMPENSATING);
+                        idempotencyRepository.save(claim);
+                        // Return instead of throwing so FAILED and compensation intent are
+                        // committed first.
+                        return new SagaResult(null, ex);
+                    }
+                    // On failure here PROCESSING survives. Recovery replays these idempotent
+                    // operations.
+                    transactions.execute(step -> paymentsFacade.confirm(key));
+                    transactions.execute(step -> inventoryFacade.consume(key));
+                    order.setStatus(OrderStatus.CONFIRMED).setLastModifiedDate(LocalDateTime.now());
+                    orderRepository.save(order);
+                    eventPublisher.publishEvent(
+                            new OrderConfirmedEvent(
+                                    order.getId(),
+                                    order.getCustomerId(),
+                                    order.getTotalPrice(),
+                                    "USD",
+                                    LocalDateTime.now()));
+                    eventPublisher.publishEvent(toOrderDto(order));
+                    OrderResponse response = toOrderResponse(order);
+                    claim.setResponsePayload(objectMapper.writeValueAsString(response))
+                            .setStatus(OrderIdempotency.STATUS_COMPLETED)
+                            .setLastModifiedDate(LocalDateTime.now());
+                    idempotencyRepository.save(claim);
+                    return new SagaResult(response, null);
+                });
+    }
+
+    private static String operationKey(Long orderId) {
+        return "order-" + orderId;
+    }
+
+    private void compensate(Order order, String key) {
+        var payment = paymentsFacade.getPaymentStatus(key);
+        if (order.getStatus() == OrderStatus.CONFIRMED && payment.isEmpty()) {
+            throw new IllegalStateException(
+                    "Confirmed order has no payment reservation: " + order.getId());
+        }
+        if (payment.isPresent()) {
+            if (payment.get().status() == PaymentStatus.CONFIRMED) {
+                transactions.execute(
+                        step ->
+                                paymentsFacade.refund(
+                                        new PaymentRefundRequest(
+                                                "cancel-" + order.getId(),
+                                                order.getId(),
+                                                order.getCustomerId(),
+                                                order.getTotalPrice(),
+                                                "USD",
+                                                "Order compensation")));
+            } else if (payment.get().status() == PaymentStatus.RESERVED) {
+                transactions.execute(step -> paymentsFacade.release(key));
             }
-            throw ex;
         }
-
-        if (invResult.status() != InventoryReservationStatus.RESERVED) {
-            savedOrder.setStatus(OrderStatus.FAILED);
-            savedOrder.setSource("INVENTORY");
-            orderRepository.save(savedOrder);
-            idempotencyRecord.setStatus(OrderIdempotency.STATUS_FAILED);
-            idempotencyRepository.save(idempotencyRecord);
-            throw new IllegalArgumentException(
-                    "Inventory reservation failed: " + invResult.message());
+        var inventory = inventoryFacade.getReservationStatus(key);
+        if (order.getStatus() == OrderStatus.CONFIRMED && inventory.isEmpty()) {
+            throw new IllegalStateException(
+                    "Confirmed order has no inventory reservation: " + order.getId());
         }
-
-        // 6. Reserve Payment
-        PaymentReservationRequest payReq =
-                new PaymentReservationRequest(
-                        effectiveKey, savedOrder.getId(), request.customerId(), totalPrice, "USD");
-        PaymentResult payResult = paymentsFacade.reserve(payReq);
-
-        if (payResult.status() != PaymentStatus.RESERVED) {
-            // COMPENSATE: release reserved inventory
-            log.warn(
-                    "Payment reservation failed for order {}. Compensating inventory reservation.",
-                    savedOrder.getId());
-            inventoryFacade.release(effectiveKey);
-
-            savedOrder.setStatus(OrderStatus.FAILED);
-            savedOrder.setSource("PAYMENT");
-            orderRepository.save(savedOrder);
-            idempotencyRecord.setStatus(OrderIdempotency.STATUS_FAILED);
-            idempotencyRepository.save(idempotencyRecord);
-            throw new IllegalArgumentException(
-                    "Payment reservation failed: " + payResult.message());
+        if (inventory.isPresent()
+                && (inventory.get().status() == InventoryReservationStatus.RESERVED
+                        || inventory.get().status() == InventoryReservationStatus.CONSUMED)) {
+            transactions.execute(step -> inventoryFacade.cancelReservation(key));
         }
+    }
 
-        // 7. Confirm payment and consume inventory
-        paymentsFacade.confirm(effectiveKey);
-        inventoryFacade.consume(effectiveKey);
-
-        savedOrder.setStatus(OrderStatus.CONFIRMED);
-        savedOrder.setLastModifiedDate(LocalDateTime.now());
-        Order confirmedOrder = orderRepository.save(savedOrder);
-
-        // 8. Publish Events
-        OrderConfirmedEvent event =
-                new OrderConfirmedEvent(
-                        confirmedOrder.getId(),
-                        confirmedOrder.getCustomerId(),
-                        confirmedOrder.getTotalPrice(),
-                        "USD",
-                        LocalDateTime.now());
-        eventPublisher.publishEvent(event);
-
-        OrderDto orderDto = toOrderDto(confirmedOrder);
-        try {
-            rabbitTemplate.convertAndSend(
-                    RabbitMqOrdersConfig.ORDERS_EXCHANGE, "order.confirmed", orderDto);
-        } catch (Exception ex) {
-            log.warn("Direct RabbitMQ publishing failed; outbox will handle async dispatch", ex);
+    @Scheduled(fixedDelayString = "${orders.recovery.delay-ms:30000}")
+    public void recoverPendingOrders() {
+        for (var claim :
+                idempotencyRepository.findByStatusIn(
+                        List.of(
+                                OrderIdempotency.STATUS_PROCESSING,
+                                OrderIdempotency.STATUS_COMPENSATING,
+                                OrderIdempotency.STATUS_CANCELLING))) {
+            try {
+                process(claim.getId());
+            } catch (RuntimeException ex) {
+                log.warn("Order recovery remains pending for order {}", claim.getOrderId(), ex);
+            }
         }
-        streamStoreService.put(orderDto);
-
-        // 9. Cache response and complete idempotency record
-        OrderResponse response = toOrderResponse(confirmedOrder);
-        try {
-            idempotencyRecord.setResponsePayload(objectMapper.writeValueAsString(response));
-        } catch (Exception e) {
-            log.warn("Failed to serialize response payload for idempotency record", e);
-        }
-        idempotencyRecord.setStatus(OrderIdempotency.STATUS_COMPLETED);
-        idempotencyRecord.setLastModifiedDate(LocalDateTime.now());
-        idempotencyRepository.save(idempotencyRecord);
-
-        return response;
     }
 
     @Override
@@ -343,11 +398,12 @@ public class OrdersFacadeImpl implements OrdersFacade {
             String term,
             String mode,
             Long customerId,
-            OrderStatus status,
+            String statusValue,
             Double threshold,
             int pageNo,
             int pageSize) {
         Pageable pageable = PageRequest.of(pageNo, pageSize, Sort.by("id").ascending());
+        OrderStatus status = statusValue == null ? null : OrderStatus.valueOf(statusValue);
         Page<Long> page;
         if ("similarity".equalsIgnoreCase(mode)) {
             double actualThreshold = threshold != null ? threshold : 0.3;
@@ -384,46 +440,48 @@ public class OrdersFacadeImpl implements OrdersFacade {
     }
 
     @Override
-    @Transactional
     public void cancelOrder(Long id) {
-        Order order =
-                orderRepository.findOrderById(id).orElseThrow(() -> new OrderNotFoundException(id));
-        if (order.getStatus() == OrderStatus.ROLLBACK || order.getStatus() == OrderStatus.FAILED) {
-            return;
-        }
-
-        if (order.getStatus() == OrderStatus.CONFIRMED) {
-            String cancelKey = "cancel-" + id;
-            try {
-                paymentsFacade.refund(
-                        new PaymentRefundRequest(
-                                cancelKey,
-                                order.getCustomerId(),
-                                order.getId(),
-                                order.getTotalPrice(),
-                                "USD",
-                                "Order cancelled by customer"));
-            } catch (Exception e) {
-                log.warn(
-                        "Payment refund compensation failed during cancellation of order {}",
-                        id,
-                        e);
-            }
-        }
-
-        order.setStatus(OrderStatus.ROLLBACK);
-        order.setLastModifiedDate(LocalDateTime.now());
-        orderRepository.save(order);
+        Long claimId =
+                transactions.execute(
+                        tx -> {
+                            var claim =
+                                    idempotencyRepository
+                                            .findByOrderId(id)
+                                            .orElseThrow(
+                                                    () ->
+                                                            new IllegalArgumentException(
+                                                                    "Order has no recoverable reservation references: "
+                                                                            + id));
+                            claim =
+                                    idempotencyRepository
+                                            .findLockedById(claim.getId())
+                                            .orElseThrow();
+                            Order order =
+                                    orderRepository
+                                            .findOrderById(id)
+                                            .orElseThrow(() -> new OrderNotFoundException(id));
+                            if (order.getStatus() != OrderStatus.ROLLBACK) {
+                                claim.setStatus(OrderIdempotency.STATUS_CANCELLING);
+                                idempotencyRepository.save(claim);
+                            }
+                            return claim.getId();
+                        });
+        process(claimId);
     }
 
     @Override
-    @Transactional
     public List<OrderResponse> saveBatchOrders(List<OrderRequest> requests) {
-        if (requests == null || requests.isEmpty()) {
-            return List.of();
-        }
+        if (requests == null || requests.isEmpty()) return List.of();
         return requests.stream()
-                .map(req -> createOrder(req, UUID.randomUUID().toString()))
+                .map(
+                        request -> {
+                            try {
+                                return createOrder(request, UUID.randomUUID().toString());
+                            } catch (RuntimeException ex) {
+                                log.warn("Batch order creation failed", ex);
+                                return OrderResponse.emptyResponse(null);
+                            }
+                        })
                 .toList();
     }
 

@@ -31,6 +31,8 @@ public class OrderIdempotency implements Serializable {
     public static final String STATUS_PROCESSING = "PROCESSING";
     public static final String STATUS_COMPLETED = "COMPLETED";
     public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_COMPENSATING = "COMPENSATING";
+    public static final String STATUS_CANCELLING = "CANCELLING";
 
     @Id
     @Tsid(TsidSupplier.class)
@@ -50,6 +52,9 @@ public class OrderIdempotency implements Serializable {
 
     @Column(nullable = false, length = 50)
     private String status;
+
+    @Column(name = "operation_key")
+    private String operationKey;
 
     @Column(name = "response_payload", columnDefinition = "TEXT")
     private String responsePayload;
@@ -138,6 +143,15 @@ public class OrderIdempotency implements Serializable {
 
     public OrderIdempotency setLastModifiedDate(LocalDateTime lastModifiedDate) {
         this.lastModifiedDate = lastModifiedDate;
+        return this;
+    }
+
+    public String getOperationKey() {
+        return operationKey;
+    }
+
+    public OrderIdempotency setOperationKey(String operationKey) {
+        this.operationKey = operationKey;
         return this;
     }
 }

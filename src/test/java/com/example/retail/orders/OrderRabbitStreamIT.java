@@ -31,6 +31,9 @@ import org.springframework.test.web.servlet.assertj.MockMvcTester;
 @Import(ContainersConfig.class)
 class OrderRabbitStreamIT {
 
+    @Autowired
+    private org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry registry;
+
     @Autowired private RabbitTemplate rabbitTemplate;
     @Autowired private MessageConverter messageConverter;
     @Autowired private OrderStreamStoreService streamStoreService;
@@ -57,9 +60,16 @@ class OrderRabbitStreamIT {
                                         1L, "P001", 1, BigDecimal.valueOf(999.99))),
                         "attempt-1");
 
-        rabbitTemplate.convertAndSend(
-                RabbitMqOrdersConfig.ORDERS_EXCHANGE, "order.confirmed", orderDto);
+        var listener = registry.getListenerContainer("orderStreamListener");
+        listener.stop();
+        try {
+            rabbitTemplate.convertAndSend(
+                    RabbitMqOrdersConfig.ORDERS_EXCHANGE, "order.created", orderDto);
 
+        } finally {
+            listener.start();
+        }
+        // Messages sent while stopped must replay after restart.
         // Await consumption by OrderStreamListener
         await().atMost(Duration.ofSeconds(10))
                 .untilAsserted(

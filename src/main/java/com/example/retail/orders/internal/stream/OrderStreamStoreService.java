@@ -8,29 +8,46 @@ package com.example.retail.orders.internal.stream;
 import com.example.retail.orders.internal.domain.Order;
 import com.example.retail.orders.internal.persistence.OrderRepository;
 import com.example.retail.shared.orders.OrderDto;
-import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderStreamStoreService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderStreamStoreService.class);
 
-    private final Map<Long, OrderDto> streamStore = new ConcurrentHashMap<>();
+    private final Map<Long, OrderDto> streamStore;
     private final OrderRepository orderRepository;
 
-    public OrderStreamStoreService(OrderRepository orderRepository) {
+    public OrderStreamStoreService(
+            OrderRepository orderRepository,
+            @Value("${orders.stream.cache-max-size:10000}") int maximumSize) {
+        if (maximumSize < 1)
+            throw new IllegalArgumentException("Cache maximum size must be positive");
         this.orderRepository = orderRepository;
+        this.streamStore =
+                Collections.synchronizedMap(
+                        new LinkedHashMap<>(16, 0.75f, true) {
+                            @Override
+                            protected boolean removeEldestEntry(Map.Entry<Long, OrderDto> eldest) {
+                                return size() > maximumSize;
+                            }
+                        });
     }
 
     public void put(OrderDto orderDto) {
@@ -40,27 +57,22 @@ public class OrderStreamStoreService {
         }
     }
 
+    @Transactional(readOnly = true)
     public List<OrderDto> getAllOrders(int pageNo, int pageSize) {
         log.info(
                 "Fetching orders from stream store with pageNo: {}, pageSize: {}",
                 pageNo,
                 pageSize);
-        if (!streamStore.isEmpty()) {
-            List<OrderDto> all = new ArrayList<>(streamStore.values());
-            int start = pageNo * pageSize;
-            if (start >= all.size()) {
-                return List.of();
-            }
-            int end = Math.min(start + pageSize, all.size());
-            return all.subList(start, end);
-        }
-
-        // Fallback to database if stream store has not yet been hydrated
         Pageable pageable = PageRequest.of(pageNo, pageSize, Sort.by("id").ascending());
-        Page<Order> page = orderRepository.findAll(pageable);
-        List<Order> orders =
-                orderRepository.findByIdIn(page.getContent().stream().map(Order::getId).toList());
-        return orders.stream().map(this::toOrderDto).toList();
+        Page<Long> page = orderRepository.findAllOrders(pageable);
+        List<Order> orders = orderRepository.findByIdIn(page.getContent());
+        Map<Long, Order> byId =
+                orders.stream().collect(Collectors.toMap(Order::getId, Function.identity()));
+        return page.getContent().stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .map(this::toOrderDto)
+                .toList();
     }
 
     public Optional<OrderDto> getOrderFromStoreById(String id) {

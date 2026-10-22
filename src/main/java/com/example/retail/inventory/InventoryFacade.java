@@ -149,6 +149,12 @@ public interface InventoryFacade {
     InventoryReservationResult consume(String idempotencyKey);
 
     /**
+     * Releases reserved stock or restocks consumed stock once, keyed by the original reservation.
+     * Repeated cancellation returns RELEASED without changing stock again.
+     */
+    InventoryReservationResult cancelReservation(String idempotencyKey);
+
+    /**
      * Returns the stored status and items, or an empty result when the key has no reservation.
      *
      * @throws tools.jackson.core.JacksonException if stored items cannot be read

@@ -115,7 +115,13 @@ public class OrderController {
         }
         return ResponseEntity.ok(
                 ordersFacade.searchOrders(
-                        term, mode, customerId, status, threshold, pageNo, pageSize));
+                        term,
+                        mode,
+                        customerId,
+                        status != null ? status.name() : null,
+                        threshold,
+                        pageNo,
+                        pageSize));
     }
 
     @PostMapping("/generate")

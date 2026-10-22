@@ -278,4 +278,20 @@ class OrderControllerTest {
         assertThat(result).hasStatusOk();
         assertThat(result).bodyJson().extractingPath("$.success").asBoolean().isTrue();
     }
+
+    @Test
+    void missingDeliveryAddressIsRejectedBeforeProcessing() {
+        var result =
+                mockMvcTester
+                        .post()
+                        .uri("/api/v1/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                                """
+                        {"customerId":101,"items":[{"productCode":"P001","quantity":1,"productPrice":1}]}
+                        """);
+        assertThat(result).hasStatus(HttpStatus.BAD_REQUEST);
+        org.mockito.Mockito.verify(ordersFacade, org.mockito.Mockito.never())
+                .createOrder(any(), any());
+    }
 }

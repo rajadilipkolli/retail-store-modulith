@@ -5,7 +5,6 @@
 ***/
 package com.example.retail.orders;
 
-import com.example.retail.orders.internal.domain.OrderStatus;
 import com.example.retail.shared.models.PagedResult;
 import com.example.retail.shared.orders.OrderRequest;
 import com.example.retail.shared.orders.OrderResponse;
@@ -44,7 +43,7 @@ public interface OrdersFacade {
             String term,
             String mode,
             Long customerId,
-            OrderStatus status,
+            String status,
             Double threshold,
             int pageNo,
             int pageSize);

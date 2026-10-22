@@ -26,7 +26,7 @@ Phase	Specification	Status	Evidence / PR	Approval
 1. Modulith foundation	01-modulith-foundation.md	COMPLETE	Recorded below	Approved
 2. Catalog module	02-catalog-module.md	COMPLETE	Recorded below	User Approved (#5)
 3. Inventory module	03-inventory-module.md	COMPLETE	Recorded below	User Approved (#10)
-4. Payments module	04-payments-module.md	COMPLETE	Recorded below	User Approved (#11)
+4. Payments module	04-payments-module.md	IN_PROGRESS	Recorded below	Pending reconciliation of approval records
 5. Orders orchestration	05-orders-orchestration.md	COMPLETE	Recorded below	User Approved (#12)
 6. API and deployment	06-api-and-deployment.md	NOT_STARTED	TBD	Pending
 7. Migration verification	07-migration-verification.md	NOT_STARTED	TBD	Pending
@@ -137,9 +137,9 @@ Phase 1 is COMPLETE. Foundation, packaging, module boundaries, shared and UI mod
 
 Phase 4: Payments Module
 Specification: spec/04-payments-module.md
-Status: COMPLETE
+Status: IN_PROGRESS
 Started: 2026-10-22
-Completed: 2026-10-22
+Completed: Pending (implementation date: 2026-10-22)
 Implementation PR / commit: Branch `payment-service`
 Reviewer / approver: Pending reviewer review
 
@@ -171,12 +171,12 @@ python tools/verify-specs.py	PASS	Checks executed: 187; Errors: 0; Warnings: 0; 
 
 Outstanding issues
 
-- ADR-0006 acceptance and canonical money policy verification remain pending.
+- The acceptance table reports ADR-0006 and money-policy verification as complete, while the prior decision recorded them as pending. Reconcile these records with the supporting review evidence before completion.
 - Required reviewer approval is pending.
 
 Decision
 
-Phase 4 remains IN_PROGRESS until ADR-0006 is accepted, the canonical money policy criterion is verified, and required reviewer approval is recorded.
+Phase 4 remains IN_PROGRESS until required reviewer approval is recorded and the ADR-0006 decision, canonical money-policy evidence, and outstanding issues are reconciled.
 
 ### Phase 3 Evidence Record
 

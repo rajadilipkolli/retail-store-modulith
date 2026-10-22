@@ -292,10 +292,19 @@ public class InventoryService {
     }
 
     public InventoryReservationResult release(String idempotencyKey) {
+        return restoreReservation(idempotencyKey, false);
+    }
+
+    public InventoryReservationResult cancelReservation(String idempotencyKey) {
+        return restoreReservation(idempotencyKey, true);
+    }
+
+    private InventoryReservationResult restoreReservation(
+            String idempotencyKey, boolean allowConsumed) {
         LOGGER.info("Processing release for idempotency key: {}", idempotencyKey);
         InventoryReservation reservation =
                 reservationRepository
-                        .findByIdempotencyKey(idempotencyKey)
+                        .findLockedByIdempotencyKey(idempotencyKey)
                         .orElseThrow(
                                 () ->
                                         new InventoryNotFoundException(
@@ -314,12 +323,14 @@ public class InventoryService {
                     items);
         }
 
-        if (reservation.getStatus() == InventoryReservationStatus.CONSUMED) {
+        if (!allowConsumed && reservation.getStatus() == InventoryReservationStatus.CONSUMED) {
             throw InvalidReservationTransitionException.forTransition(
                     reservation.getStatus(), "RELEASE");
         }
 
-        if (reservation.getStatus() != InventoryReservationStatus.RESERVED) {
+        if (reservation.getStatus() != InventoryReservationStatus.RESERVED
+                && !(allowConsumed
+                        && reservation.getStatus() == InventoryReservationStatus.CONSUMED)) {
             throw InvalidReservationTransitionException.forTransition(
                     reservation.getStatus(), "RELEASE");
         }
@@ -333,9 +344,16 @@ public class InventoryService {
 
         for (ReservationItem item : items) {
             Inventory inv = map.get(item.productCode());
+            if (inv == null && allowConsumed) {
+                throw new InventoryNotFoundException(
+                        "Cannot restore missing inventory for " + item.productCode());
+            }
             if (inv != null) {
-                inv.setReservedItems(Math.max(0, inv.getReservedItems() - item.quantity()));
-                inv.setAvailableQuantity(inv.getAvailableQuantity() + item.quantity());
+                if (reservation.getStatus() == InventoryReservationStatus.RESERVED) {
+                    inv.setReservedItems(Math.max(0, inv.getReservedItems() - item.quantity()));
+                }
+                inv.setAvailableQuantity(
+                        Math.addExact(inv.getAvailableQuantity(), item.quantity()));
             }
         }
         inventoryRepository.saveAll(locked);
@@ -357,7 +375,7 @@ public class InventoryService {
         LOGGER.info("Processing consume for idempotency key: {}", idempotencyKey);
         InventoryReservation reservation =
                 reservationRepository
-                        .findByIdempotencyKey(idempotencyKey)
+                        .findLockedByIdempotencyKey(idempotencyKey)
                         .orElseThrow(
                                 () ->
                                         new InventoryNotFoundException(

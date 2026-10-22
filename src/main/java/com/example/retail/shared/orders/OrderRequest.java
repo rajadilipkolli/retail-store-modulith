@@ -17,7 +17,7 @@ public record OrderRequest(
         @Positive(message = "CustomerId should be positive") Long customerId,
         @NotEmpty(message = "Order without items not valid")
                 List<@NotNull @Valid OrderItemRequest> items,
-        @Valid Address deliveryAddress)
+        @NotNull @Valid Address deliveryAddress)
         implements Serializable {
 
     @Serial private static final long serialVersionUID = 1L;

@@ -33,7 +33,7 @@ class OrderStreamStoreServiceTest {
     @BeforeEach
     void setUp() {
         orderRepository = mock(OrderRepository.class);
-        streamStoreService = new OrderStreamStoreService(orderRepository);
+        streamStoreService = new OrderStreamStoreService(orderRepository, 2);
     }
 
     @Test
@@ -55,9 +55,6 @@ class OrderStreamStoreServiceTest {
         assertThat(result).isPresent();
         assertThat(result.get().orderId()).isEqualTo(10L);
         assertThat(result.get().status()).isEqualTo("CONFIRMED");
-
-        List<OrderDto> all = streamStoreService.getAllOrders(0, 10);
-        assertThat(all).hasSize(1);
     }
 
     @Test
@@ -77,8 +74,8 @@ class OrderStreamStoreServiceTest {
                         .setProductPrice(BigDecimal.valueOf(100.00)));
 
         given(orderRepository.findOrderById(5L)).willReturn(Optional.of(order));
-        given(orderRepository.findAll(any(Pageable.class)))
-                .willReturn(new PageImpl<>(List.of(order)));
+        given(orderRepository.findAllOrders(any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(5L)));
         given(orderRepository.findByIdIn(List.of(5L))).willReturn(List.of(order));
 
         Optional<OrderDto> result = streamStoreService.getOrderFromStoreById("5");
@@ -94,5 +91,46 @@ class OrderStreamStoreServiceTest {
     @DisplayName("Invalid string ID returns empty optional")
     void invalidIdReturnsEmpty() {
         assertThat(streamStoreService.getOrderFromStoreById("invalid-id")).isEmpty();
+    }
+
+    @Test
+    void partialCacheDoesNotHidePersistedOrdersAndPagesKeepIdOrder() {
+        streamStoreService.put(new OrderDto(9L, 101L, "CONFIRMED", "WEB", List.of()));
+        Order first = new Order().setId(1L).setStatus(OrderStatus.NEW);
+        Order second = new Order().setId(2L).setStatus(OrderStatus.NEW);
+        given(orderRepository.findAllOrders(any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(1L, 2L)));
+        given(orderRepository.findByIdIn(List.of(1L, 2L))).willReturn(List.of(second, first));
+        assertThat(streamStoreService.getAllOrders(0, 2))
+                .extracting(OrderDto::orderId)
+                .containsExactly(1L, 2L);
+    }
+
+    @Test
+    void evictedOrderFallsBackToDatabase() {
+        for (long id = 1; id <= 3; id++) {
+            streamStoreService.put(new OrderDto(id, 101L, "CONFIRMED", "WEB", List.of()));
+        }
+        Order persisted = new Order().setId(1L).setStatus(OrderStatus.ROLLBACK);
+        given(orderRepository.findOrderById(1L)).willReturn(Optional.of(persisted));
+        assertThat(streamStoreService.getOrderFromStoreById("1").orElseThrow().status())
+                .isEqualTo("ROLLBACK");
+        org.mockito.Mockito.verify(orderRepository).findOrderById(1L);
+    }
+
+    @Test
+    void dtoStatusAndSourceAreReplaced() {
+        OrderDto original = new OrderDto(1L, 101L, "NEW", "WEB", List.of(), "attempt");
+        assertThat(original.withStatusAndSource("NEW", "WEB")).isSameAs(original);
+        assertThat(original.withStatusAndSource("CONFIRMED", "PAYMENT"))
+                .isEqualTo(new OrderDto(1L, 101L, "CONFIRMED", "PAYMENT", List.of(), "attempt"));
+    }
+
+    @Test
+    void orderDeletedBetweenPageQueriesDoesNotBreakListing() {
+        given(orderRepository.findAllOrders(any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(1L)));
+        given(orderRepository.findByIdIn(List.of(1L))).willReturn(List.of());
+        assertThat(streamStoreService.getAllOrders(0, 1)).isEmpty();
     }
 }

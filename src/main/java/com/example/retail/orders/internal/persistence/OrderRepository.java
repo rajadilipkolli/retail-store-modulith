@@ -107,8 +107,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             value =
                     """
                     SELECT o.id FROM orders.orders o LEFT JOIN orders.order_items oi ON o.id = oi.order_id WHERE \
-                    (:customerId IS NULL OR o.customer_id = :customerId) AND \
-                    (:status IS NULL OR cast(o.status as text) = :status) AND \
+                    (cast(:customerId as bigint) IS NULL OR o.customer_id = :customerId) AND \
+                    (cast(:status as text) IS NULL OR cast(o.status as text) = :status) AND \
                     (o.source % :term OR o.delivery_address_line1 % :term OR o.delivery_address_line2 % :term OR \
                     o.delivery_address_city % :term OR o.delivery_address_state % :term OR o.delivery_address_zip_code % :term OR \
                     o.delivery_address_country % :term OR oi.product_code % :term OR \
@@ -124,8 +124,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             countQuery =
                     """
                     SELECT count(DISTINCT o.id) FROM orders.orders o LEFT JOIN orders.order_items oi ON o.id = oi.order_id WHERE \
-                    (:customerId IS NULL OR o.customer_id = :customerId) AND \
-                    (:status IS NULL OR cast(o.status as text) = :status) AND \
+                    (cast(:customerId as bigint) IS NULL OR o.customer_id = :customerId) AND \
+                    (cast(:status as text) IS NULL OR cast(o.status as text) = :status) AND \
                     (o.source % :term OR o.delivery_address_line1 % :term OR o.delivery_address_line2 % :term OR \
                     o.delivery_address_city % :term OR o.delivery_address_state % :term OR o.delivery_address_zip_code % :term OR \
                     o.delivery_address_country % :term OR oi.product_code % :term OR \

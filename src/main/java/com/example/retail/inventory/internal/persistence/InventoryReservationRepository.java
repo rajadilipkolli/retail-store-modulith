@@ -18,6 +18,11 @@ public interface InventoryReservationRepository extends JpaRepository<InventoryR
 
     List<InventoryReservation> findByOrderId(Long orderId);
 
+    @org.springframework.data.jpa.repository.Lock(
+            jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from InventoryReservation r where r.idempotencyKey = :key")
+    Optional<InventoryReservation> findLockedByIdempotencyKey(@Param("key") String key);
+
     /** Checks whether any reservation with status {@code RESERVED} contains the product code. */
     @Query(
             value =

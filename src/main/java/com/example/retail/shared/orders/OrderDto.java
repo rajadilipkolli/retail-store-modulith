@@ -46,7 +46,7 @@ public record OrderDto(
         if (Objects.equals(this.status(), status) && Objects.equals(this.source(), source)) {
             return this;
         }
-        return new OrderDto(orderId(), customerId(), status(), source(), items(), attemptId());
+        return new OrderDto(orderId(), customerId(), status, source, items(), attemptId());
     }
 
     public record OrderItemDto(

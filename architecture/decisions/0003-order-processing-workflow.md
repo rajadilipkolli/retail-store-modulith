@@ -19,13 +19,25 @@ The Orders module owns order lifecycle management and orchestrates the order cre
 2. Pre-commit and Idempotency Claim: Atomically persist an order in the `orders` schema with status `NEW` and claim the `(customerId, idempotencyKey)` lock in `orders.order_idempotency` with a versioned canonical request fingerprint.
 3. Inventory Reservation: Request stock reservation via `InventoryFacade.reserve()`. If insufficient stock or failed, mark the order `FAILED`, record the idempotency failure, and abort.
 4. Payment Reservation: Request fund reservation via `PaymentsFacade.reserve()`. If payment fails (e.g., insufficient funds), compensate by releasing reserved inventory via `InventoryFacade.release()`, mark the order `FAILED`, record the idempotency failure, and abort.
-5. Order Confirmation & Events: Confirm payment via `PaymentsFacade.confirm()`, consume inventory reservation via `InventoryFacade.consume()`, transition order status to `CONFIRMED`, publish `OrderConfirmedEvent` via transactional outbox, append the order to the `orders.stream` RabbitMQ Stream queue, and complete the idempotency record with the cached response.
+5. Order Confirmation & Events: Confirm payment via `PaymentsFacade.confirm()`, consume inventory reservation via `InventoryFacade.consume()`, transition order status to `CONFIRMED`, publish `OrderConfirmedEvent` via transactional outbox, publish its `OrderDto` through the same post-commit externalization path to `orders.stream`, and complete the idempotency record with the cached response.
 
 Idempotency and Compensation Guarantees:
 - Scoped Idempotency: Keys are isolated by customer: `(customer_id, idempotency_key)` to avoid cross-tenant or cross-customer collision.
 - Canonical Request Fingerprinting: SHA-256 fingerprint generated from normalized customer ID, sorted item list (`code:quantity:price`), and normalized address. Replay with identical fingerprint returns original cached `OrderResponse`; replay with altered parameters returns HTTP 409 Conflict.
-- Safe Retries: All compensation calls (`InventoryFacade.release`, `PaymentsFacade.release`, `PaymentsFacade.refund`) are idempotent.
+- Safe Retries: All compensation calls (`InventoryFacade.release`, `InventoryFacade.cancelReservation`, `PaymentsFacade.release`, `PaymentsFacade.refund`) are idempotent.
 - RabbitMQ Streams: Queue `orders.stream` of type `stream` is maintained for real-time order stream consumption and queries via `GET /api/v1/orders/store`.
+
+Recovery implementation (clarification of the saga decision):
+- `TransactionTemplate` with `REQUIRES_NEW` commits the `NEW` order, price snapshot, request fingerprint, and claim before any reservation. Each Inventory/Payments mutation also commits independently. Database schemas alone do not prevent a shared local transaction; these boundaries are deliberate.
+- Persist `operation_key` on the claim (`order-<orderId>` for new orders) and use it for every reservation, capture, consume, and release. Existing claims without this field retain their original reservation key. Never overwrite a failed claim's fingerprint or create a second order for that key.
+- The recovery worker runs every 30 seconds (`orders.recovery.delay-ms`) and scans durable `PROCESSING`, `COMPENSATING`, and `CANCELLING` claims. A pessimistic claim lock serializes recovery, confirmation, and cancellation across instances. Matching requests while unfinished return an explicit conflict; the worker resumes the existing workflow.
+- If capture commits but consume, order persistence, or event registration fails, the claim remains `PROCESSING`. Recovery replays reserve/confirm/consume using stored order items and prices. Payments returns the already confirmed payment and Inventory returns already consumed stock without repeating effects. The order transition, cached response, and durable event registrations commit together. Local rollback never reverses the captured payment.
+- Reservation failures first commit order `FAILED` plus claim `COMPENSATING`. Independent compensation then releases any reserved payment and restores inventory. If compensation fails, the intent remains durable for the worker. Completion changes the claim to `FAILED`; a new checkout requires a new client key.
+- Cancellation first commits `CANCELLING`. A confirmed payment is refunded with `cancel-<orderId>`; a reserved payment is released with its reservation key. `InventoryFacade.cancelReservation` releases reserved stock or restocks consumed stock under a reservation lock, recording `RELEASED` atomically. Only successful compensation allows `ROLLBACK`. A completed checkout keeps its original cached response for identical create replays after cancellation. A retry after partial compensation reuses these keys. Legacy orders lacking reservation references require reconciliation and cannot be silently marked cancelled.
+- Order prices come from Catalog; submitted prices are ignored for pricing but retained in the request fingerprint for conflict detection. Recovery and replay retain the stored price snapshot.
+- `OrderConfirmedEvent` routes to `order.confirmed` / `orders.events`; `OrderDto` routes to `order.created` / `orders.stream`. The existing Modulith outbox handles post-commit dispatch. Consumers replay retained messages from `first` on restart; stream retention is seven days. Older persisted orders remain available from the database. Existing stream queues must be migrated using broker-supported retention policy or coordinated redeclaration before deploying changed queue arguments. Remove obsolete `order.*` bindings during that migration; declaring new bindings does not remove existing ones.
+- The stream lookup cache is bounded by `orders.stream.cache-max-size` (default 10,000). Complete listings always use database pages sorted by ID, regardless of cache hydration or eviction. Batch processing uses independent checkout transactions and preserves input positions with the existing `SERVICE_UNAVAILABLE` response for failures.
+- Recovery failures are logged with the order ID and leave the claim pending. Operators must monitor pending claims and retry failures after resolving unavailable dependencies; no automatic expiry discards compensation obligations.
 
 3. Alternatives Considered
 Alternative A: One local database transaction
@@ -43,7 +55,7 @@ This provides explicit control over workflow states (`NEW`, `CONFIRMED`, `FAILED
 4. Consequences
 Positive
 - Explicit, deterministic ownership of order checkout saga.
-- Guaranteed failure compensation (no reserved stock left hanging when payment fails).
+- Durable, retryable compensation when payment fails; dependency outages can delay restoration.
 - Scoped idempotency prevents double charging and duplicate order submission.
 - Preserves `/api/v1/orders/store` queryability through RabbitMQ Streams.
 - Strict compliance with Spring Modulith module boundaries.
@@ -65,6 +77,7 @@ Trade-offs
 - Idempotent replays return cached response without repeated side effects.
 - Mismatched request with same key returns HTTP 409 Conflict.
 - Order cancellation triggers payment refund and transitions status to `ROLLBACK`.
+- Recovery from a fresh worker after capture, retryable refund/release, pre-commit visibility, consumer restart replay, and cross-customer keys are covered by integration tests.
 - Spring Modulith architectural verification verifies module DAG.
 
 7. Approval
