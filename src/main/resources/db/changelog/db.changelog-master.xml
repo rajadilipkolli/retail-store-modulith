@@ -15,6 +15,11 @@
     <include file="db/changelog/inventory/03-insert-sample-inventory.xml"/>
     <include file="db/changelog/inventory/04-create-generated-inventory-keys.xml"/>
 
+    <include file="db/changelog/payment/00-create-payment-schema.xml"/>
+    <include file="db/changelog/payment/01-create-customers-table.xml"/>
+    <include file="db/changelog/payment/02-create-payment-operations-table.xml"/>
+    <include file="db/changelog/payment/03-insert-sample-customers.xml"/>
+
     <include file="db/changelog/shared/01-create-event-publication.sql"/>
     <include file="db/changelog/shared/02-create-event-publication-archive.sql"/>
 

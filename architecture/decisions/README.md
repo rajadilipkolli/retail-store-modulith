@@ -18,6 +18,7 @@ Examples:
 0003-order-processing-workflow.md
 0004-event-reliability.md
 0005-database-migration-strategy.md
+0006-canonical-money-policy.md
 
 Use sequential numbers. Do not reuse a number, even when an ADR is superseded.
 

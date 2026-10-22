@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="insert-sample-customers" author="rajakolli" context="sample-data">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">SELECT COUNT(*) FROM payment.customers WHERE id = 101</sqlCheck>
+        </preConditions>
+        <insert schemaName="payment" tableName="customers">
+            <column name="id" valueNumeric="101"/>
+            <column name="name" value="John Doe"/>
+            <column name="email" value="john.doe@example.com"/>
+            <column name="phone" value="+1-555-0100"/>
+            <column name="address_line1" value="123 Main St"/>
+            <column name="city" value="New York"/>
+            <column name="state" value="NY"/>
+            <column name="zip_code" value="10001"/>
+            <column name="country" value="USA"/>
+            <column name="amount_available" valueNumeric="5000.00"/>
+            <column name="amount_reserved" valueNumeric="0.00"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="payment" tableName="customers">
+            <column name="id" valueNumeric="102"/>
+            <column name="name" value="Jane Smith"/>
+            <column name="email" value="jane.smith@example.com"/>
+            <column name="phone" value="+1-555-0101"/>
+            <column name="address_line1" value="456 Oak Ave"/>
+            <column name="city" value="Los Angeles"/>
+            <column name="state" value="CA"/>
+            <column name="zip_code" value="90210"/>
+            <column name="country" value="USA"/>
+            <column name="amount_available" valueNumeric="3500.00"/>
+            <column name="amount_reserved" valueNumeric="0.00"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="payment" tableName="customers">
+            <column name="id" valueNumeric="103"/>
+            <column name="name" value="Mike Johnson"/>
+            <column name="email" value="mike.johnson@example.com"/>
+            <column name="phone" value="+1-555-0102"/>
+            <column name="address_line1" value="789 Pine Rd"/>
+            <column name="city" value="Chicago"/>
+            <column name="state" value="IL"/>
+            <column name="zip_code" value="60601"/>
+            <column name="country" value="USA"/>
+            <column name="amount_available" valueNumeric="7500.00"/>
+            <column name="amount_reserved" valueNumeric="0.00"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="payment" tableName="customers">
+            <column name="id" valueNumeric="104"/>
+            <column name="name" value="Raja Kolli"/>
+            <column name="email" value="rajakolli@gmail.com"/>
+            <column name="phone" value="+1-555-0104"/>
+            <column name="address_line1" value="123 Raja St"/>
+            <column name="city" value="Raja City"/>
+            <column name="state" value="RA"/>
+            <column name="zip_code" value="12345"/>
+            <column name="country" value="USA"/>
+            <column name="amount_available" valueNumeric="10000.00"/>
+            <column name="amount_reserved" valueNumeric="0.00"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+        <insert schemaName="payment" tableName="customers">
+            <column name="id" valueNumeric="105"/>
+            <column name="name" value="Retail Store"/>
+            <column name="email" value="retailstore@gmail.com"/>
+            <column name="phone" value="+1-555-0105"/>
+            <column name="address_line1" value="123 Retail St"/>
+            <column name="city" value="Retail City"/>
+            <column name="state" value="RE"/>
+            <column name="zip_code" value="12345"/>
+            <column name="country" value="USA"/>
+            <column name="amount_available" valueNumeric="10000.00"/>
+            <column name="amount_reserved" valueNumeric="0.00"/>
+            <column name="version" valueNumeric="0"/>
+        </insert>
+    </changeSet>
+
+</databaseChangeLog>

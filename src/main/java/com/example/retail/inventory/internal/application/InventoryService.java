@@ -187,7 +187,7 @@ public class InventoryService {
 
     public void initializeProductInventory(String productCode) {
         if (!inventoryRepository.existsByProductCode(productCode)) {
-            Inventory inventory = new Inventory(null, productCode, 0, 0);
+            Inventory inventory = new Inventory().setProductCode(productCode);
             inventoryRepository.save(inventory);
             LOGGER.info("Initialized zero inventory for new product: {}", productCode);
         }
