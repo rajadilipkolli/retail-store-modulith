@@ -8,8 +8,10 @@ package com.example.retail.inventory.internal.web;
 import com.example.retail.inventory.internal.domain.IdempotencyConflictException;
 import com.example.retail.inventory.internal.domain.InsufficientStockException;
 import com.example.retail.inventory.internal.domain.InvalidReservationTransitionException;
+import com.example.retail.inventory.internal.domain.InventoryConflictException;
 import com.example.retail.inventory.internal.domain.InventoryNotFoundException;
 import com.example.retail.inventory.internal.domain.ProductAlreadyExistsException;
+import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Comparator;
@@ -33,8 +35,8 @@ public class InventoryExceptionHandler {
         return problem;
     }
 
-    @ExceptionHandler(ProductAlreadyExistsException.class)
-    public ProblemDetail handleProductAlreadyExists(ProductAlreadyExistsException ex) {
+    @ExceptionHandler({ProductAlreadyExistsException.class, InventoryConflictException.class})
+    public ProblemDetail handleProductAlreadyExists(RuntimeException ex) {
         ProblemDetail problem =
                 ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Inventory Conflict");
@@ -72,6 +74,12 @@ public class InventoryExceptionHandler {
         problem.setType(URI.create("https://api.retail.com/errors/invalid-transition"));
         problem.setProperty("timestamp", Instant.now());
         return problem;
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ProblemDetail handleConstraintViolation(ConstraintViolationException ex) {
+        return ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, "Invalid request parameters.");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

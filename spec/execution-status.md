@@ -24,7 +24,7 @@ A phase with failed or unverified mandatory criteria MUST NOT be marked COMPLETE
 3. Phase Overview
 Phase	Specification	Status	Evidence / PR	Approval
 1. Modulith foundation	01-modulith-foundation.md	COMPLETE	Recorded below	Approved
-2. Catalog module	02-catalog-module.md	COMPLETE	Recorded below	User Approved
+2. Catalog module	02-catalog-module.md	IN_PROGRESS	Recorded below	Pending mandatory criteria verification
 3. Inventory module	03-inventory-module.md	IN_PROGRESS	Recorded below	Pending
 4. Payments module	04-payments-module.md	NOT_STARTED	TBD	Pending
 5. Orders orchestration	05-orders-orchestration.md	NOT_STARTED	TBD	Pending
@@ -180,11 +180,11 @@ Phase 3 mandatory implementation and acceptance criteria are verified with passi
 
 Phase 2: Catalog Module
 Specification: spec/02-catalog-module.md
-Status: COMPLETE
+Status: IN_PROGRESS
 Started: 2026-10-21
 Completed: 2026-10-22
 Implementation PR / commit: Local branch `catalog-service`
-Reviewer / approver: User Approved
+Reviewer / approver: Prior approval noted; final approval after mandatory criteria verification is not recorded
 
 Acceptance criteria evidence
 
@@ -220,7 +220,7 @@ Outstanding issues
 
 Decision
 
-Phase 2 is COMPLETE.
+Phase 2 remains IN_PROGRESS until API compatibility, cutover and exit criteria are verified and final reviewer approval is recorded.
 
 
 7. Blocker Register

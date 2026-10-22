@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verify;
 import com.example.retail.inventory.internal.application.InventoryService;
 import com.example.retail.inventory.internal.domain.IdempotencyConflictException;
 import com.example.retail.inventory.internal.domain.InvalidReservationTransitionException;
+import com.example.retail.inventory.internal.domain.InventoryConflictException;
 import com.example.retail.inventory.internal.domain.ProductAlreadyExistsException;
 import com.example.retail.inventory.internal.web.InventoryController;
 import com.example.retail.inventory.internal.web.InventoryExceptionHandler;
@@ -88,6 +89,54 @@ class InventoryControllerTest {
                 .bodyJson()
                 .extractingPath("$.productCode")
                 .isEqualTo("P001");
+    }
+
+    @Test
+    void getInventoryByProductCode_RejectsExcessiveDelay() {
+        assertThat(mockMvcTester.get().uri("/api/v1/inventory/P001?delay=6"))
+                .hasStatus(HttpStatus.BAD_REQUEST);
+        org.mockito.Mockito.verifyNoInteractions(inventoryService);
+    }
+
+    @Test
+    void getInventoryByProductCode_RejectsNegativeDelay() {
+        assertThat(mockMvcTester.get().uri("/api/v1/inventory/P001?delay=-1"))
+                .hasStatus(HttpStatus.BAD_REQUEST);
+        org.mockito.Mockito.verifyNoInteractions(inventoryService);
+    }
+
+    @Test
+    void getInventoryByProductCode_AcceptsMaximumDelay() {
+        given(inventoryService.findInventoryByProductCode("P001"))
+                .willReturn(Optional.of(new InventoryResponse(1L, "P001", 10, 0)));
+        assertThat(mockMvcTester.get().uri("/api/v1/inventory/P001?delay=5")).hasStatusOk();
+    }
+
+    @Test
+    void updateInventory_ImmutableCodeReturnsConflict() {
+        given(inventoryService.updateInventoryById(eq(1L), any()))
+                .willThrow(
+                        new InventoryConflictException("Inventory product code cannot be changed"));
+        assertThat(
+                        mockMvcTester
+                                .put()
+                                .uri("/api/v1/inventory/1")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"productCode\":\"P002\",\"availableQuantity\":20}"))
+                .hasStatus(HttpStatus.CONFLICT);
+    }
+
+    @Test
+    void deleteInventory_ActiveReservationReturnsConflict() {
+        given(inventoryService.findInventoryById(1L))
+                .willReturn(Optional.of(new InventoryResponse(1L, "P001", 10, 1)));
+        org.mockito.Mockito.doThrow(
+                        new InventoryConflictException(
+                                "Inventory with outstanding reservations cannot be deleted"))
+                .when(inventoryService)
+                .deleteInventoryById(1L);
+        assertThat(mockMvcTester.delete().uri("/api/v1/inventory/1"))
+                .hasStatus(HttpStatus.CONFLICT);
     }
 
     @Test

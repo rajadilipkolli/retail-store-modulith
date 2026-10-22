@@ -17,9 +17,11 @@ import com.example.retail.inventory.internal.application.InventoryService;
 import com.example.retail.inventory.internal.domain.IdempotencyConflictException;
 import com.example.retail.inventory.internal.domain.InvalidReservationTransitionException;
 import com.example.retail.inventory.internal.domain.Inventory;
+import com.example.retail.inventory.internal.domain.InventoryConflictException;
 import com.example.retail.inventory.internal.domain.InventoryNotFoundException;
 import com.example.retail.inventory.internal.domain.InventoryReservation;
 import com.example.retail.inventory.internal.domain.ProductAlreadyExistsException;
+import com.example.retail.inventory.internal.persistence.GeneratedInventoryRepository;
 import com.example.retail.inventory.internal.persistence.InventoryRepository;
 import com.example.retail.inventory.internal.persistence.InventoryReservationRepository;
 import com.example.retail.shared.inventory.InventoryProcessedEvent;
@@ -56,6 +58,8 @@ class InventoryServiceTest {
 
     @Mock private ApplicationEventPublisher eventPublisher;
 
+    @Mock private GeneratedInventoryRepository generatedInventoryRepository;
+
     private ObjectMapper objectMapper;
 
     private InventoryService inventoryService;
@@ -65,7 +69,11 @@ class InventoryServiceTest {
         objectMapper = JsonMapper.builder().build();
         inventoryService =
                 new InventoryService(
-                        inventoryRepository, reservationRepository, eventPublisher, objectMapper);
+                        inventoryRepository,
+                        reservationRepository,
+                        generatedInventoryRepository,
+                        eventPublisher,
+                        objectMapper);
     }
 
     @Test
@@ -159,7 +167,7 @@ class InventoryServiceTest {
     }
 
     @Test
-    @DisplayName("updateInventoryById updates successfully when code is unchanged or unique")
+    @DisplayName("updateInventoryById updates quantity when code is unchanged")
     void updateInventoryById_Success() {
         Inventory inv = new Inventory(1L, "P001", 10, 0);
         given(inventoryRepository.findById(1L)).willReturn(Optional.of(inv));
@@ -170,26 +178,22 @@ class InventoryServiceTest {
         Optional<InventoryResponse> res1 = inventoryService.updateInventoryById(1L, sameCode);
         assertThat(res1).isPresent();
         assertThat(res1.get().availableQuantity()).isEqualTo(30);
-
-        InventoryRequest newCode = new InventoryRequest("P002", 40);
-        given(inventoryRepository.existsByProductCode("P002")).willReturn(false);
-        Optional<InventoryResponse> res2 = inventoryService.updateInventoryById(1L, newCode);
-        assertThat(res2).isPresent();
-        assertThat(res2.get().productCode()).isEqualTo("P002");
-        assertThat(res2.get().availableQuantity()).isEqualTo(40);
     }
 
     @Test
-    @DisplayName("updateInventoryById throws ProductAlreadyExistsException on collision")
-    void updateInventoryById_Collision() {
+    @DisplayName("updateInventoryById rejects a different code without mutating inventory")
+    void updateInventoryById_RejectsCodeChange() {
         Inventory inv = new Inventory(1L, "P001", 10, 0);
         given(inventoryRepository.findById(1L)).willReturn(Optional.of(inv));
-        given(inventoryRepository.existsByProductCode("P002")).willReturn(true);
 
-        InventoryRequest req = new InventoryRequest("P002", 20);
-        assertThatThrownBy(() -> inventoryService.updateInventoryById(1L, req))
-                .isInstanceOf(ProductAlreadyExistsException.class)
-                .hasMessageContaining("P002");
+        assertThatThrownBy(
+                        () ->
+                                inventoryService.updateInventoryById(
+                                        1L, new InventoryRequest("P002", 20)))
+                .isInstanceOf(InventoryConflictException.class);
+        assertThat(inv.getProductCode()).isEqualTo("P001");
+        assertThat(inv.getAvailableQuantity()).isEqualTo(10);
+        verify(inventoryRepository, never()).save(any());
     }
 
     @Test
@@ -225,28 +229,158 @@ class InventoryServiceTest {
     @Test
     @DisplayName("deleteInventoryById calls repository delete")
     void deleteInventoryById() {
+        given(inventoryRepository.findWithLockById(1L))
+                .willReturn(Optional.of(new Inventory(1L, "P001", 10, 0)));
         inventoryService.deleteInventoryById(1L);
         verify(inventoryRepository).deleteById(1L);
     }
 
     @Test
-    @DisplayName("updateGeneratedInventory handles null, duplicates, batchSize, and updates")
+    void deleteInventoryById_RejectsReservedStock() {
+        given(inventoryRepository.findWithLockById(1L))
+                .willReturn(Optional.of(new Inventory(1L, "P001", 10, 2)));
+        assertThatThrownBy(() -> inventoryService.deleteInventoryById(1L))
+                .isInstanceOf(InventoryConflictException.class);
+        verify(inventoryRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteInventoryById_RejectsActiveReservationEvenIfCounterIsZero() {
+        given(inventoryRepository.findWithLockById(1L))
+                .willReturn(Optional.of(new Inventory(1L, "P001", 10, 0)));
+        given(reservationRepository.existsReservedByProductCode("P001")).willReturn(true);
+        assertThatThrownBy(() -> inventoryService.deleteInventoryById(1L))
+                .isInstanceOf(InventoryConflictException.class);
+        verify(inventoryRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteInventoryById_MissingInventoryIsNoOp() {
+        inventoryService.deleteInventoryById(1L);
+        verify(inventoryRepository, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("updateGeneratedInventory handles null, persisted duplicates, and batch size")
     void updateGeneratedInventory() {
         inventoryService.updateGeneratedInventory(null, 5);
         verify(inventoryRepository, never()).findByProductCodeIn(anyList());
-
+        given(generatedInventoryRepository.claim("gen-key")).willReturn(true, false);
         inventoryService.updateGeneratedInventory("gen-key", 2);
-        verify(inventoryRepository).findByProductCodeIn(anyList());
-
-        // Duplicate call with same key should be ignored
         inventoryService.updateGeneratedInventory("gen-key", 2);
-        verify(inventoryRepository).findByProductCodeIn(anyList());
+        verify(inventoryRepository)
+                .findByProductCodeIn(List.of("ProductCode_gen-key_0", "ProductCode_gen-key_1"));
 
-        // Test with null and large batchSize
-        Inventory matching1 = new Inventory(1L, "ProductCode_key2_0", 0, 0);
-        given(inventoryRepository.findByProductCodeIn(anyList())).willReturn(List.of(matching1));
+        Inventory matching = new Inventory(1L, "ProductCode_key2_0", 0, 0);
+        given(generatedInventoryRepository.claim("key2")).willReturn(true);
+        given(inventoryRepository.findByProductCodeIn(anyList())).willReturn(List.of(matching));
         inventoryService.updateGeneratedInventory("key2", null);
+        assertThat(matching.getAvailableQuantity()).isBetween(1, 100);
         verify(inventoryRepository, org.mockito.Mockito.times(2)).saveAll(anyList());
+    }
+
+    @Test
+    void reserve_DuplicateProductsRequireTotalStock() {
+        Inventory inventory = new Inventory(1L, "P001", 5, 0);
+        given(inventoryRepository.findWithLockByProductCodeIn(List.of("P001")))
+                .willReturn(List.of(inventory));
+        InventoryReservationRequest request =
+                new InventoryReservationRequest(
+                        "duplicate-lines",
+                        100L,
+                        List.of(new ReservationItem("P001", 3), new ReservationItem("P001", 3)));
+
+        assertThat(inventoryService.reserve(request).status())
+                .isEqualTo(InventoryReservationStatus.FAILED);
+        assertThat(inventory.getAvailableQuantity()).isEqualTo(5);
+        assertThat(inventory.getReservedItems()).isZero();
+        verify(inventoryRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void reserve_DuplicateProductsAdjustTotalStock() {
+        Inventory inventory = new Inventory(1L, "P001", 10, 1);
+        given(inventoryRepository.findWithLockByProductCodeIn(List.of("P001")))
+                .willReturn(List.of(inventory));
+        InventoryReservationRequest request =
+                new InventoryReservationRequest(
+                        "duplicate-lines-ok",
+                        100L,
+                        List.of(new ReservationItem("P001", 2), new ReservationItem("P001", 3)));
+
+        assertThat(inventoryService.reserve(request).status())
+                .isEqualTo(InventoryReservationStatus.RESERVED);
+        assertThat(inventory.getAvailableQuantity()).isEqualTo(5);
+        assertThat(inventory.getReservedItems()).isEqualTo(6);
+    }
+
+    @Test
+    void reserve_RechecksIdempotencyAfterLock() {
+        List<ReservationItem> items = List.of(new ReservationItem("P001", 2));
+        InventoryReservation stored =
+                new InventoryReservation(
+                        1L,
+                        "race",
+                        100L,
+                        InventoryReservationStatus.RESERVED,
+                        objectMapper.writeValueAsString(items),
+                        Instant.now(),
+                        Instant.now());
+        given(reservationRepository.findByIdempotencyKey("race"))
+                .willReturn(Optional.empty(), Optional.of(stored));
+        Inventory inventory = new Inventory(1L, "P001", 8, 2);
+        given(inventoryRepository.findWithLockByProductCodeIn(List.of("P001")))
+                .willReturn(List.of(inventory));
+
+        assertThat(
+                        inventoryService
+                                .reserve(new InventoryReservationRequest("race", 100L, items))
+                                .status())
+                .isEqualTo(InventoryReservationStatus.RESERVED);
+        assertThat(inventory.getAvailableQuantity()).isEqualTo(8);
+        verify(reservationRepository, never()).save(any());
+        verify(inventoryRepository, never()).saveAll(anyList());
+        verify(eventPublisher, never()).publishEvent(any(InventoryProcessedEvent.class));
+    }
+
+    @Test
+    void reserve_RecheckRejectsDifferentOrderOrItems() {
+        List<ReservationItem> items = List.of(new ReservationItem("P001", 2));
+        InventoryReservation stored =
+                new InventoryReservation(
+                        1L,
+                        "race-conflict",
+                        100L,
+                        InventoryReservationStatus.RESERVED,
+                        objectMapper.writeValueAsString(items),
+                        Instant.now(),
+                        Instant.now());
+        given(reservationRepository.findByIdempotencyKey("race-conflict"))
+                .willReturn(
+                        Optional.empty(),
+                        Optional.of(stored),
+                        Optional.empty(),
+                        Optional.of(stored));
+        Inventory inventory = new Inventory(1L, "P001", 8, 2);
+        given(inventoryRepository.findWithLockByProductCodeIn(List.of("P001")))
+                .willReturn(List.of(inventory));
+
+        assertThatThrownBy(
+                        () ->
+                                inventoryService.reserve(
+                                        new InventoryReservationRequest(
+                                                "race-conflict", 101L, items)))
+                .isInstanceOf(IdempotencyConflictException.class);
+        assertThatThrownBy(
+                        () ->
+                                inventoryService.reserve(
+                                        new InventoryReservationRequest(
+                                                "race-conflict",
+                                                100L,
+                                                List.of(new ReservationItem("P001", 3)))))
+                .isInstanceOf(IdempotencyConflictException.class);
+        assertThat(inventory.getAvailableQuantity()).isEqualTo(8);
+        verify(reservationRepository, never()).save(any());
     }
 
     @Test

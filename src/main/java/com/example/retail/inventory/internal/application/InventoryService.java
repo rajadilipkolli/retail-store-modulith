@@ -8,9 +8,11 @@ package com.example.retail.inventory.internal.application;
 import com.example.retail.inventory.internal.domain.IdempotencyConflictException;
 import com.example.retail.inventory.internal.domain.InvalidReservationTransitionException;
 import com.example.retail.inventory.internal.domain.Inventory;
+import com.example.retail.inventory.internal.domain.InventoryConflictException;
 import com.example.retail.inventory.internal.domain.InventoryNotFoundException;
 import com.example.retail.inventory.internal.domain.InventoryReservation;
 import com.example.retail.inventory.internal.domain.ProductAlreadyExistsException;
+import com.example.retail.inventory.internal.persistence.GeneratedInventoryRepository;
 import com.example.retail.inventory.internal.persistence.InventoryRepository;
 import com.example.retail.inventory.internal.persistence.InventoryReservationRepository;
 import com.example.retail.shared.inventory.InventoryProcessedEvent;
@@ -30,8 +32,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -57,15 +57,17 @@ public class InventoryService {
     private final InventoryReservationRepository reservationRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
-    private final Set<String> processedGenerationKeys = ConcurrentHashMap.newKeySet();
+    private final GeneratedInventoryRepository generatedInventoryRepository;
 
     public InventoryService(
             InventoryRepository inventoryRepository,
             InventoryReservationRepository reservationRepository,
+            GeneratedInventoryRepository generatedInventoryRepository,
             ApplicationEventPublisher eventPublisher,
             ObjectMapper objectMapper) {
         this.inventoryRepository = inventoryRepository;
         this.reservationRepository = reservationRepository;
+        this.generatedInventoryRepository = generatedInventoryRepository;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
     }
@@ -128,13 +130,10 @@ public class InventoryService {
                 .findById(id)
                 .map(
                         existing -> {
-                            if (!existing.getProductCode().equals(request.productCode())
-                                    && inventoryRepository.existsByProductCode(
-                                            request.productCode())) {
-                                throw ProductAlreadyExistsException.forProductCode(
-                                        request.productCode());
+                            if (!existing.getProductCode().equals(request.productCode())) {
+                                throw new InventoryConflictException(
+                                        "Inventory product code cannot be changed");
                             }
-                            existing.setProductCode(request.productCode());
                             existing.setAvailableQuantity(request.availableQuantity());
                             return mapToInventoryResponse(inventoryRepository.save(existing));
                         });
@@ -152,12 +151,21 @@ public class InventoryService {
     }
 
     public void deleteInventoryById(Long id) {
+        Inventory inventory = inventoryRepository.findWithLockById(id).orElse(null);
+        if (inventory == null) {
+            return;
+        }
+        if (inventory.getReservedItems() > 0
+                || reservationRepository.existsReservedByProductCode(inventory.getProductCode())) {
+            throw new InventoryConflictException(
+                    "Inventory with outstanding reservations cannot be deleted");
+        }
         inventoryRepository.deleteById(id);
         LOGGER.info("Deleted inventory with id: {}", id);
     }
 
     public void updateGeneratedInventory(String idempotencyKey, Integer batchSize) {
-        if (idempotencyKey == null || !processedGenerationKeys.add(idempotencyKey)) {
+        if (idempotencyKey == null || !generatedInventoryRepository.claim(idempotencyKey)) {
             LOGGER.info("Generation key already processed or null: {}", idempotencyKey);
             return;
         }
@@ -192,23 +200,7 @@ public class InventoryService {
         Optional<InventoryReservation> existingOpt =
                 reservationRepository.findByIdempotencyKey(request.idempotencyKey());
         if (existingOpt.isPresent()) {
-            InventoryReservation existing = existingOpt.get();
-            List<ReservationItem> storedItems = deserializeItems(existing.getItemsJson());
-            if (!Objects.equals(existing.getOrderId(), request.orderId())
-                    || !itemsEqual(storedItems, request.items())) {
-                LOGGER.error("Idempotency conflict for key: {}", request.idempotencyKey());
-                throw IdempotencyConflictException.forKey(request.idempotencyKey());
-            }
-            LOGGER.info(
-                    "Returning idempotent existing reservation result for key: {}, status: {}",
-                    request.idempotencyKey(),
-                    existing.getStatus());
-            return new InventoryReservationResult(
-                    existing.getIdempotencyKey(),
-                    existing.getOrderId(),
-                    existing.getStatus(),
-                    "Idempotent reservation retrieved",
-                    storedItems);
+            return existingReservationResult(existingOpt.get(), request);
         }
 
         // Step 2: Lock products in deterministic ascending order to prevent deadlocks
@@ -220,6 +212,17 @@ public class InventoryService {
                         .toList();
         List<Inventory> lockedInventories =
                 inventoryRepository.findWithLockByProductCodeIn(productCodes);
+        // A concurrent retry may have committed while this transaction waited for stock locks.
+        existingOpt = reservationRepository.findByIdempotencyKey(request.idempotencyKey());
+        if (existingOpt.isPresent()) {
+            return existingReservationResult(existingOpt.get(), request);
+        }
+        Map<String, Long> requestedQuantities =
+                request.items().stream()
+                        .collect(
+                                Collectors.groupingBy(
+                                        ReservationItem::productCode,
+                                        Collectors.summingLong(ReservationItem::quantity)));
         Map<String, Inventory> inventoryMap =
                 lockedInventories.stream()
                         .collect(Collectors.toMap(Inventory::getProductCode, Function.identity()));
@@ -235,32 +238,54 @@ public class InventoryService {
                     "Some requested products were not found in inventory");
         }
 
-        // Step 3: Check stock availability
-        for (ReservationItem item : request.items()) {
-            Inventory inventory = inventoryMap.get(item.productCode());
-            if (inventory.getAvailableQuantity() < item.quantity()) {
+        // Step 3: Check each product against the total quantity across all request lines.
+        for (Map.Entry<String, Long> item : requestedQuantities.entrySet()) {
+            Inventory inventory = inventoryMap.get(item.getKey());
+            if (inventory.getAvailableQuantity() < item.getValue()) {
                 LOGGER.warn(
                         "Reservation failed: insufficient stock for product: {}, requested: {}, available: {}",
-                        item.productCode(),
-                        item.quantity(),
+                        item.getKey(),
+                        item.getValue(),
                         inventory.getAvailableQuantity());
                 return recordAndPublishReservation(
                         request,
                         InventoryReservationStatus.FAILED,
-                        "Insufficient stock for product " + item.productCode());
+                        "Insufficient stock for product " + item.getKey());
             }
         }
 
-        // Step 4: Mutate quantities atomically
-        for (ReservationItem item : request.items()) {
-            Inventory inventory = inventoryMap.get(item.productCode());
-            inventory.setAvailableQuantity(inventory.getAvailableQuantity() - item.quantity());
-            inventory.setReservedItems(inventory.getReservedItems() + item.quantity());
+        // Step 4: Mutate quantities atomically using the same totals.
+        for (Map.Entry<String, Long> item : requestedQuantities.entrySet()) {
+            Inventory inventory = inventoryMap.get(item.getKey());
+            int quantity =
+                    item.getValue().intValue(); // Bounded by the available stock check above.
+            inventory.setAvailableQuantity(inventory.getAvailableQuantity() - quantity);
+            inventory.setReservedItems(Math.addExact(inventory.getReservedItems(), quantity));
         }
         inventoryRepository.saveAll(lockedInventories);
 
         return recordAndPublishReservation(
                 request, InventoryReservationStatus.RESERVED, "Stock reserved successfully");
+    }
+
+    private InventoryReservationResult existingReservationResult(
+            InventoryReservation existing, InventoryReservationRequest request) {
+        List<ReservationItem> storedItems = deserializeItems(existing.getItemsJson());
+        if (!Objects.equals(existing.getOrderId(), request.orderId())
+                || !itemsEqual(storedItems, request.items())) {
+            LOGGER.error("Idempotency conflict for key: {}", request.idempotencyKey());
+            throw IdempotencyConflictException.forKey(request.idempotencyKey());
+        }
+        LOGGER.info(
+                "Returning idempotent existing reservation result for key: {}, status: {}",
+                request.idempotencyKey(),
+                existing.getStatus());
+        return new InventoryReservationResult(
+                existing.getIdempotencyKey(),
+                existing.getOrderId(),
+                existing.getStatus(),
+                "Idempotent reservation retrieved",
+                storedItems);
     }
 
     public InventoryReservationResult release(String idempotencyKey) {

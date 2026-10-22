@@ -25,7 +25,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 
-@SpringBootTest
+@SpringBootTest(properties = "spring.liquibase.contexts=sample-data")
 @AutoConfigureMockMvc
 @Import(ContainersConfig.class)
 class InventoryPersistenceIT {
@@ -46,6 +46,17 @@ class InventoryPersistenceIT {
                 .extractingPath("$.totalElements")
                 .asNumber()
                 .satisfies(n -> assertThat(n.intValue()).isGreaterThanOrEqualTo(5));
+    }
+
+    @Test
+    void sampleInventoryHasNoUnbackedReservations() {
+        assertThat(
+                        jdbcClient
+                                .sql(
+                                        "SELECT sum(reserved_items) FROM inventory.inventory WHERE product_code IN ('P001', 'P002', 'P003', 'P004', 'P005')")
+                                .query(Long.class)
+                                .single())
+                .isZero();
     }
 
     @Test

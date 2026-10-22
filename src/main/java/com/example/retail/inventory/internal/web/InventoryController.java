@@ -55,7 +55,8 @@ public class InventoryController {
 
     @GetMapping("/{productCode}")
     public ResponseEntity<InventoryResponse> getInventoryByProductCode(
-            @PathVariable String productCode, @RequestParam(required = false) Integer delay) {
+            @PathVariable String productCode,
+            @RequestParam(required = false) @Min(0) @Max(5) Integer delay) {
         if (delay != null && delay > 0) {
             try {
                 TimeUnit.SECONDS.sleep(delay);

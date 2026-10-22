@@ -13,6 +13,7 @@
     <include file="db/changelog/inventory/01-create-inventory-table.xml"/>
     <include file="db/changelog/inventory/02-create-inventory-reservations-table.xml"/>
     <include file="db/changelog/inventory/03-insert-sample-inventory.xml"/>
+    <include file="db/changelog/inventory/04-create-generated-inventory-keys.xml"/>
 
     <include file="db/changelog/shared/01-create-event-publication.sql"/>
     <include file="db/changelog/shared/02-create-event-publication-archive.sql"/>

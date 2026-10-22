@@ -156,20 +156,20 @@ graph TD
 
 | Path | Purpose |
 |---|---|
-| [`AGENTS.md`](file:///c:/tools/git/retail-store-modulith/AGENTS.md) | Shared engineering rules and constraints for all AI coding assistants |
-| [`GEMINI.md`](file:///c:/tools/git/retail-store-modulith/GEMINI.md) | Gemini CLI instructions and SDD compliance rules |
-| [`spec/spring-modulith-migration.md`](file:///c:/tools/git/retail-store-modulith/spec/spring-modulith-migration.md) | Master migration specification and architectural blueprint |
-| [`spec/execution-status.md`](file:///c:/tools/git/retail-store-modulith/spec/execution-status.md) | Phase status tracking, blockers, and verification evidence |
-| [`spec/01-modulith-foundation.md`](file:///c:/tools/git/retail-store-modulith/spec/01-modulith-foundation.md) | Phase 1: Modulith Foundation & architecture verification |
-| [`spec/02-catalog-module.md`](file:///c:/tools/git/retail-store-modulith/spec/02-catalog-module.md) | Phase 2: Catalog Module migration |
-| [`spec/03-inventory-module.md`](file:///c:/tools/git/retail-store-modulith/spec/03-inventory-module.md) | Phase 3: Inventory Module migration |
-| [`spec/04-payments-module.md`](file:///c:/tools/git/retail-store-modulith/spec/04-payments-module.md) | Phase 4: Payments Module migration |
-| [`spec/05-orders-orchestration.md`](file:///c:/tools/git/retail-store-modulith/spec/05-orders-orchestration.md) | Phase 5: Orders Orchestration & checkout workflow |
-| [`spec/06-api-and-deployment.md`](file:///c:/tools/git/retail-store-modulith/spec/06-api-and-deployment.md) | Phase 6: API Compatibility, security, and deployment assets |
-| [`spec/07-migration-verification.md`](file:///c:/tools/git/retail-store-modulith/spec/07-migration-verification.md) | Phase 7: Cutover readiness, parity testing, and verification |
-| [`ai/skills/`](file:///c:/tools/git/retail-store-modulith/ai/skills/) | Reusable SDD, Spring Modulith, TDD, and verification skills |
-| [`architecture/decisions/`](file:///c:/tools/git/retail-store-modulith/architecture/decisions/) | Architecture Decision Records (ADRs) |
-| [`tools/verify-specs.py`](file:///c:/tools/git/retail-store-modulith/tools/verify-specs.py) | Python validator for specification consistency and link integrity |
+| [`AGENTS.md`](AGENTS.md) | Shared engineering rules and constraints for all AI coding assistants |
+| [`GEMINI.md`](GEMINI.md) | Gemini CLI instructions and SDD compliance rules |
+| [`spec/spring-modulith-migration.md`](spec/spring-modulith-migration.md) | Master migration specification and architectural blueprint |
+| [`spec/execution-status.md`](spec/execution-status.md) | Phase status tracking, blockers, and verification evidence |
+| [`spec/01-modulith-foundation.md`](spec/01-modulith-foundation.md) | Phase 1: Modulith Foundation & architecture verification |
+| [`spec/02-catalog-module.md`](spec/02-catalog-module.md) | Phase 2: Catalog Module migration |
+| [`spec/03-inventory-module.md`](spec/03-inventory-module.md) | Phase 3: Inventory Module migration |
+| [`spec/04-payments-module.md`](spec/04-payments-module.md) | Phase 4: Payments Module migration |
+| [`spec/05-orders-orchestration.md`](spec/05-orders-orchestration.md) | Phase 5: Orders Orchestration & checkout workflow |
+| [`spec/06-api-and-deployment.md`](spec/06-api-and-deployment.md) | Phase 6: API Compatibility, security, and deployment assets |
+| [`spec/07-migration-verification.md`](spec/07-migration-verification.md) | Phase 7: Cutover readiness, parity testing, and verification |
+| [`ai/skills/`](ai/skills/) | Reusable SDD, Spring Modulith, TDD, and verification skills |
+| [`architecture/decisions/`](architecture/decisions/) | Architecture Decision Records (ADRs) |
+| [`tools/verify-specs.py`](tools/verify-specs.py) | Python validator for specification consistency and link integrity |
 
 ---
 
@@ -226,10 +226,10 @@ Always validate specifications and architecture definitions before and after cha
 
 ```bash
 # Validate specification references, skills, and ADR metadata
-python tools/verify-specs.py
+python3 tools/verify-specs.py
 
 # Check Python syntax for validator
-python -m py_compile tools/verify-specs.py
+python3 -m py_compile tools/verify-specs.py
 ```
 
 ---
@@ -245,7 +245,7 @@ All development in this repository strictly adheres to SDD:
    - **Green:** Implement the minimum code required to pass.
    - **Refactor:** Clean code while preserving behavior and running Spotless.
 4. **Architectural Verification:** Run `ModulithArchitectureTests` to verify boundary compliance.
-5. **Record Evidence:** Record test runs and verification results in [`spec/execution-status.md`](file:///c:/tools/git/retail-store-modulith/spec/execution-status.md).
+5. **Record Evidence:** Record test runs and verification results in [`spec/execution-status.md`](spec/execution-status.md).
 
 ---
 
@@ -253,13 +253,13 @@ All development in this repository strictly adheres to SDD:
 
 | Phase | Module / Focus | Status | Specification |
 |:---:|---|:---:|---|
-| **1** | Modulith Foundation & Architecture Verification | `COMPLETE` | [`spec/01-modulith-foundation.md`](file:///c:/tools/git/retail-store-modulith/spec/01-modulith-foundation.md) |
-| **2** | Catalog Module | `COMPLETE` | [`spec/02-catalog-module.md`](file:///c:/tools/git/retail-store-modulith/spec/02-catalog-module.md) |
-| **3** | Inventory Module | `IN_PROGRESS` | [`spec/03-inventory-module.md`](file:///c:/tools/git/retail-store-modulith/spec/03-inventory-module.md) |
-| **4** | Payments Module | `NOT_STARTED` | [`spec/04-payments-module.md`](file:///c:/tools/git/retail-store-modulith/spec/04-payments-module.md) |
-| **5** | Orders Orchestration & Checkout | `NOT_STARTED` | [`spec/05-orders-orchestration.md`](file:///c:/tools/git/retail-store-modulith/spec/05-orders-orchestration.md) |
-| **6** | API Compatibility & Deployment | `NOT_STARTED` | [`spec/06-api-and-deployment.md`](file:///c:/tools/git/retail-store-modulith/spec/06-api-and-deployment.md) |
-| **7** | Migration Verification & Cutover Readiness | `NOT_STARTED` | [`spec/07-migration-verification.md`](file:///c:/tools/git/retail-store-modulith/spec/07-migration-verification.md) |
+| **1** | Modulith Foundation & Architecture Verification | `COMPLETE` | [`spec/01-modulith-foundation.md`](spec/01-modulith-foundation.md) |
+| **2** | Catalog Module | `IN_PROGRESS` | [`spec/02-catalog-module.md`](spec/02-catalog-module.md) |
+| **3** | Inventory Module | `IN_PROGRESS` | [`spec/03-inventory-module.md`](spec/03-inventory-module.md) |
+| **4** | Payments Module | `NOT_STARTED` | [`spec/04-payments-module.md`](spec/04-payments-module.md) |
+| **5** | Orders Orchestration & Checkout | `NOT_STARTED` | [`spec/05-orders-orchestration.md`](spec/05-orders-orchestration.md) |
+| **6** | API Compatibility & Deployment | `NOT_STARTED` | [`spec/06-api-and-deployment.md`](spec/06-api-and-deployment.md) |
+| **7** | Migration Verification & Cutover Readiness | `NOT_STARTED` | [`spec/07-migration-verification.md`](spec/07-migration-verification.md) |
 
 > [!IMPORTANT]
 > Do not retire legacy microservices or delete deployment assets until Phase 7 verification is complete and explicit stakeholder approval is recorded.

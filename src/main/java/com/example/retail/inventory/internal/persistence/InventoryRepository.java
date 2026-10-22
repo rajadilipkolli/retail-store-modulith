@@ -27,6 +27,10 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
     Page<Inventory> findByProductCodeIn(List<String> productCodes, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT i FROM Inventory i WHERE i.id = :id")
+    Optional<Inventory> findWithLockById(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT i FROM Inventory i WHERE i.productCode = :productCode")
     Optional<Inventory> findWithLockByProductCode(@Param("productCode") String productCode);
 
