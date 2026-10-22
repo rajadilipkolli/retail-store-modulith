@@ -50,6 +50,7 @@ public class InventoryReservation {
 
     public InventoryReservation() {}
 
+    /** Creates a reservation, defaulting each null timestamp independently to the current time. */
     public InventoryReservation(
             Long id,
             String idempotencyKey,

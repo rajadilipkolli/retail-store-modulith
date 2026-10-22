@@ -467,6 +467,10 @@ public class InventoryService {
         return objectMapper.readValue(json, new TypeReference<List<ReservationItem>>() {});
     }
 
+    /**
+     * Compares item lines after sorting by product code. Quantities are not aggregated; lines with
+     * the same code retain their relative order and must match individually.
+     */
     private boolean itemsEqual(List<ReservationItem> list1, List<ReservationItem> list2) {
         if (list1.size() != list2.size()) {
             return false;

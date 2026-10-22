@@ -18,6 +18,7 @@ public interface InventoryReservationRepository extends JpaRepository<InventoryR
 
     List<InventoryReservation> findByOrderId(Long orderId);
 
+    /** Checks whether any reservation with status {@code RESERVED} contains the product code. */
     @Query(
             value =
                     """

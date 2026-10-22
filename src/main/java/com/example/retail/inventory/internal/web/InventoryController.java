@@ -53,6 +53,12 @@ public class InventoryController {
         return inventoryService.findAllInventories(pageNo, pageSize, sortBy, sortDir);
     }
 
+    /**
+     * Returns inventory or HTTP 404 when the product code is not found.
+     *
+     * @param delay optional delay in seconds, from 0 through 5; interruption restores the interrupt
+     *     flag and the lookup still proceeds
+     */
     @GetMapping("/{productCode}")
     public ResponseEntity<InventoryResponse> getInventoryByProductCode(
             @PathVariable String productCode,
@@ -82,6 +88,13 @@ public class InventoryController {
                         codes, pageNo, pageSize, sortBy, sortDir));
     }
 
+    /**
+     * Updates existing generated inventory for the key.
+     *
+     * @param batchSize optional number of candidate codes, from 1 through 10,000; omission uses 101
+     * @return true after normal completion, including when the key was already processed or no
+     *     inventory matched
+     */
     @PostMapping("/generate")
     public boolean updateInventoryWithRandomValue(
             @RequestHeader(name = "Idempotency-Key") String idempotencyKey,

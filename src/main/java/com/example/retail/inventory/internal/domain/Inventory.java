@@ -36,6 +36,7 @@ public class Inventory {
 
     public Inventory() {}
 
+    /** Creates inventory, treating null available or reserved quantities as zero. */
     public Inventory(
             Long id, String productCode, Integer availableQuantity, Integer reservedItems) {
         this.id = id;

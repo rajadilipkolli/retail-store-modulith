@@ -16,6 +16,13 @@ public class GeneratedInventoryRepository {
         this.jdbcClient = jdbcClient;
     }
 
+    /**
+     * Inserts a generation key unless it already exists, participating in the caller's transaction.
+     * A concurrent claim waits for the competing transaction to commit or roll back.
+     *
+     * @return true if this call inserted the key; false if the key already exists
+     * @throws org.springframework.dao.DataAccessException if the insert fails
+     */
     public boolean claim(String idempotencyKey) {
         // Shares the inventory transaction: the key becomes durable only if stock updates commit.
         // Concurrent inserts wait for commit/rollback before deciding whether the key is a

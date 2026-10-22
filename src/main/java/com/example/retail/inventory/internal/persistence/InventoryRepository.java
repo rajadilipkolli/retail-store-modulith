@@ -26,14 +26,20 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
 
     Page<Inventory> findByProductCodeIn(List<String> productCodes, Pageable pageable);
 
+    /** Returns the matching inventory with a pessimistic write lock, or empty if absent. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT i FROM Inventory i WHERE i.id = :id")
     Optional<Inventory> findWithLockById(@Param("id") Long id);
 
+    /** Returns the matching inventory with a pessimistic write lock, or empty if absent. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT i FROM Inventory i WHERE i.productCode = :productCode")
     Optional<Inventory> findWithLockByProductCode(@Param("productCode") String productCode);
 
+    /**
+     * Locks matching inventory for writing in ascending product-code order; missing codes are
+     * omitted.
+     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
             "SELECT i FROM Inventory i WHERE i.productCode IN :productCodes ORDER BY i.productCode ASC")
