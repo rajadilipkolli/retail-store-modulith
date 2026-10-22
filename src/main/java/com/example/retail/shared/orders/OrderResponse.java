@@ -25,6 +25,7 @@ public record OrderResponse(
 
     @Serial private static final long serialVersionUID = 1L;
 
+    /** Returns a SERVICE_UNAVAILABLE fallback with the supplied ID, zero total, and no items. */
     public static OrderResponse emptyResponse(Long id) {
         return new OrderResponse(
                 id, null, "SERVICE_UNAVAILABLE", null, null, null, BigDecimal.ZERO, List.of());

@@ -38,6 +38,11 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("select o.id from Order o where o.customerId = :customerId")
     Page<Long> findAllOrdersByCustomerId(@Param("customerId") Long customerId, Pageable pageable);
 
+    /**
+     * Updates status and source only while the order is NEW.
+     *
+     * @return the number of updated orders, zero if absent or no longer NEW
+     */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query(
@@ -54,6 +59,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findByStatusAndLastModifiedDateLessThanOrderByIdAsc(
             OrderStatus status, LocalDateTime lastModifiedDate);
 
+    /**
+     * Searches source, address fields, and product codes using case-insensitive SQL LIKE patterns
+     * and optional customer and status filters. Unsorted requests default to ascending ID.
+     *
+     * @throws IllegalArgumentException if sorting uses a property other than ID or ignores case
+     */
     default Page<Long> searchOrdersByKeyword(
             String term, Long customerId, OrderStatus status, Pageable pageable) {
         if (pageable.getSort().stream()

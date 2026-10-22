@@ -40,6 +40,19 @@ public class OrderGeneratorService {
         this.generationRepository = generationRepository;
     }
 
+    /**
+     * Generates sample orders in groups of at most ten, recording progress after each successful
+     * batch. Completed or in-progress keys return without generating more orders. Failed runs
+     * resume using the stored size and completed-batch count; a partially successful batch may be
+     * submitted again.
+     *
+     * @param idempotencyKey nonblank generation key, used as supplied without trimming
+     * @param batchSize total orders to generate, from 1 through 10,000; null defaults to ten
+     * @throws IllegalArgumentException if the key is null or blank or the size is out of range
+     * @throws IllegalStateException if a batch contains a response with no order ID
+     * @throws RuntimeException if persistence or batch processing fails; processing failures
+     *     attempt to mark the run failed before being rethrown
+     */
     public void generateOrders(String idempotencyKey, Integer batchSize) {
         validateBatchSize(batchSize);
         if (idempotencyKey == null || idempotencyKey.isBlank()) {

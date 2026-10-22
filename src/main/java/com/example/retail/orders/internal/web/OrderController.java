@@ -53,6 +53,7 @@ public class OrderController {
         this.orderStreamStoreService = orderStreamStoreService;
     }
 
+    /** Returns a sorted order page with a zero-based page index. */
     @GetMapping
     public PagedResult<OrderResponse> getAllOrders(
             @RequestParam(defaultValue = "0", required = false) int pageNo,
@@ -62,6 +63,7 @@ public class OrderController {
         return ordersFacade.findAllOrders(pageNo, pageSize, sortBy, sortDir);
     }
 
+    /** Returns HTTP 200 with the order, or raises an order-not-found error handled as HTTP 404. */
     @GetMapping("/{id}")
     public ResponseEntity<OrderResponse> getOrderById(@PathVariable Long id) {
         return ordersFacade
@@ -70,6 +72,10 @@ public class OrderController {
                 .orElseThrow(() -> new OrderNotFoundException(id));
     }
 
+    /**
+     * Creates or replays an order and returns HTTP 201 with its details and canonical Location.
+     * Idempotency conflicts propagate as HTTP 409; invalid order arguments as HTTP 400.
+     */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<OrderResponse> createOrder(
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
@@ -79,18 +85,24 @@ public class OrderController {
                 .body(orderResponse);
     }
 
+    /**
+     * Updates the delivery address and returns HTTP 200 with the order; missing orders yield HTTP
+     * 404.
+     */
     @PutMapping("/{id}")
     public ResponseEntity<OrderResponse> updateOrder(
             @PathVariable Long id, @RequestBody @Valid OrderRequest orderRequest) {
         return ResponseEntity.ok(ordersFacade.updateOrder(id, orderRequest));
     }
 
+    /** Deletes the order without compensating payment or inventory and returns HTTP 202. */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteOrder(@PathVariable Long id) {
         ordersFacade.deleteOrderById(id);
         return ResponseEntity.accepted().build();
     }
 
+    /** Returns HTTP 200 with a zero-based page of customer orders sorted by ascending ID. */
     @GetMapping("/customer/{id}")
     public ResponseEntity<PagedResult<OrderResponse>> getOrdersByCustomerId(
             @PathVariable Long id,
@@ -99,6 +111,12 @@ public class OrderController {
         return ResponseEntity.ok(ordersFacade.findOrdersByCustomerId(id, pageNo, pageSize));
     }
 
+    /**
+     * Searches orders with optional customer and status filters and returns HTTP 200.
+     *
+     * @throws IllegalArgumentException if a supplied similarity threshold is below zero or above
+     *     one
+     */
     @GetMapping("/search")
     public ResponseEntity<PagedResult<OrderResponse>> searchOrders(
             @RequestParam @NotBlank String term,
@@ -124,6 +142,12 @@ public class OrderController {
                         pageSize));
     }
 
+    /**
+     * Runs sample order generation synchronously and returns HTTP 200 with success true when the
+     * call completes, including when the key is already completed or in progress.
+     *
+     * @param batchSize total orders to generate, from 1 through 10,000; null defaults to ten
+     */
     @PostMapping("/generate")
     public ResponseEntity<Map<String, Boolean>> createMockOrders(
             @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
@@ -135,6 +159,9 @@ public class OrderController {
         return ResponseEntity.ok(Map.of("success", true));
     }
 
+    /**
+     * Returns a database page of order DTOs in ascending ID order using a zero-based page index.
+     */
     @GetMapping("/store")
     public List<OrderDto> allFromStore(
             @RequestParam(defaultValue = "0", required = false) int pageNo,
@@ -142,6 +169,10 @@ public class OrderController {
         return orderStreamStoreService.getAllOrders(pageNo, pageSize);
     }
 
+    /**
+     * Returns HTTP 200 with a cached order or database fallback. Missing or invalid IDs raise an
+     * order-not-found error handled as HTTP 404.
+     */
     @GetMapping("/store/{id}")
     public ResponseEntity<OrderDto> getOrderFromStoreById(@PathVariable String id) {
         return orderStreamStoreService

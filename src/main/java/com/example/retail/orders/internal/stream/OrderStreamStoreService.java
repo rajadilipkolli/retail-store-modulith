@@ -34,6 +34,11 @@ public class OrderStreamStoreService {
     private final Map<Long, OrderDto> streamStore;
     private final OrderRepository orderRepository;
 
+    /**
+     * Creates a bounded cache that evicts the least recently accessed entry when full.
+     *
+     * @throws IllegalArgumentException if the maximum size is not positive
+     */
     public OrderStreamStoreService(
             OrderRepository orderRepository,
             @Value("${orders.stream.cache-max-size:10000}") int maximumSize) {
@@ -50,6 +55,7 @@ public class OrderStreamStoreService {
                         });
     }
 
+    /** Caches or replaces an order by ID; null orders and orders without IDs are ignored. */
     public void put(OrderDto orderDto) {
         if (orderDto != null && orderDto.orderId() != null) {
             log.info("Putting order {} into RabbitMQ stream store", orderDto.orderId());
@@ -57,6 +63,14 @@ public class OrderStreamStoreService {
         }
     }
 
+    /**
+     * Returns a database page sorted by ascending ID, independently of the stream cache. Orders
+     * removed between the ID query and detail query are omitted.
+     *
+     * @param pageNo zero-based page index
+     * @param pageSize maximum orders per page; must be positive
+     * @throws IllegalArgumentException if the page index is negative or page size is not positive
+     */
     @Transactional(readOnly = true)
     public List<OrderDto> getAllOrders(int pageNo, int pageSize) {
         log.info(
@@ -75,6 +89,10 @@ public class OrderStreamStoreService {
                 .toList();
     }
 
+    /**
+     * Returns the cached order, falling back to the database on a cache miss. Null, nonnumeric,
+     * out-of-range, and missing IDs yield an empty result; database failures propagate.
+     */
     public Optional<OrderDto> getOrderFromStoreById(String id) {
         try {
             Long orderId = Long.valueOf(id);

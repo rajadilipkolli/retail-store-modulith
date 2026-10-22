@@ -198,11 +198,15 @@ public class Order implements Serializable {
         return this;
     }
 
+    /** Adds the item and sets its owning order to this order. */
     public void addOrderItem(OrderItem orderItem) {
         items.add(orderItem);
         orderItem.setOrder(this);
     }
 
+    /**
+     * Removes the item and clears its owning order, even if it was not in this order’s item list.
+     */
     public void removeOrderItem(OrderItem orderItem) {
         items.remove(orderItem);
         orderItem.setOrder(null);

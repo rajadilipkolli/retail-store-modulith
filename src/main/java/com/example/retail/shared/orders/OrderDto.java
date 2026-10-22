@@ -38,10 +38,15 @@ public record OrderDto(
         this(orderId, customerId, status, source, items, null);
     }
 
+    /** Returns a copy with the supplied attempt ID, preserving the other fields. */
     public OrderDto withAttemptId(String attemptId) {
         return new OrderDto(orderId(), customerId(), status(), source(), items(), attemptId);
     }
 
+    /**
+     * Returns this instance if status and source match, otherwise a copy preserving the other
+     * fields.
+     */
     public OrderDto withStatusAndSource(String status, String source) {
         if (Objects.equals(this.status(), status) && Objects.equals(this.source(), source)) {
             return this;
@@ -60,6 +65,11 @@ public record OrderDto(
 
         @Serial private static final long serialVersionUID = 1L;
 
+        /**
+         * Returns quantity times unit price rounded HALF_UP to two decimal places.
+         *
+         * @throws NullPointerException if the quantity or unit price is null
+         */
         public BigDecimal getPrice() {
             return this.productPrice()
                     .multiply(BigDecimal.valueOf(this.quantity()))

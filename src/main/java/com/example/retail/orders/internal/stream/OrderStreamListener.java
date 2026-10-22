@@ -23,6 +23,7 @@ public class OrderStreamListener {
         this.orderStreamStoreService = orderStreamStoreService;
     }
 
+    /** Replaces the cached order snapshot for the received order ID. */
     @RabbitListener(
             id = "orderStreamListener",
             queues = RabbitMqOrdersConfig.ORDERS_STREAM_QUEUE,

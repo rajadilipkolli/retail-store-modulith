@@ -48,6 +48,11 @@ public class OrderGenerationRepository {
                 .optional();
     }
 
+    /**
+     * Creates an IN_PROGRESS generation record with zero completed batches.
+     *
+     * @return true if inserted, false if the key already exists
+     */
     public boolean createInitial(String idempotencyKey, int batchSize, int totalBatches) {
         return jdbcClient
                         .sql(
@@ -68,6 +73,7 @@ public class OrderGenerationRepository {
                 == 1;
     }
 
+    /** Stores the completed-batch count and updates the modification time for an existing key. */
     public void updateProgress(String idempotencyKey, int completedBatches) {
         jdbcClient
                 .sql(
@@ -82,6 +88,7 @@ public class OrderGenerationRepository {
                 .update();
     }
 
+    /** Marks an existing run COMPLETED and stores its completed-batch count. */
     public void markCompleted(String idempotencyKey, int completedBatches) {
         jdbcClient
                 .sql(
@@ -98,6 +105,10 @@ public class OrderGenerationRepository {
                 .update();
     }
 
+    /**
+     * Marks an existing run FAILED, retaining progress and truncating a nonnull error to 1,000
+     * characters.
+     */
     public void markFailed(String idempotencyKey, String errorMessage) {
         String truncatedError =
                 errorMessage != null
@@ -118,6 +129,11 @@ public class OrderGenerationRepository {
                 .update();
     }
 
+    /**
+     * Changes only a FAILED run to IN_PROGRESS, clearing its error and retaining progress.
+     *
+     * @return true if the run was claimed for resumption, false if absent or no longer FAILED
+     */
     public boolean markResumed(String idempotencyKey) {
         return jdbcClient
                         .sql(

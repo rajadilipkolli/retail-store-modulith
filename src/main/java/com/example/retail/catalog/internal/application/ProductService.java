@@ -103,7 +103,9 @@ public class ProductService implements CatalogFacade {
     }
 
     /**
-     * Returns the product for the web API with stock availability resolved from Inventory.
+     * Returns the product for the web API with stock availability resolved from Inventory. Missing
+     * inventory or a null or nonpositive available quantity yields false; an absent Inventory
+     * facade leaves availability null. Inventory lookup failures propagate to the caller.
      *
      * @throws ProductNotFoundException if no product has the supplied ID
      */
@@ -119,7 +121,9 @@ public class ProductService implements CatalogFacade {
      *
      * @param productCode product code to find
      * @param fetchInStock if {@code true}, queries {@link InventoryFacade} to determine if
-     *     available quantity > 0; otherwise stock is returned as {@code null}
+     *     available quantity is positive; missing inventory or a null quantity yields false.
+     *     Otherwise, or if the facade is absent, stock is returned as {@code null}
+     * @throws RuntimeException if the requested inventory lookup fails
      * @throws ProductNotFoundException if no product has the supplied code
      */
     public ProductResponse findProductByProductCode(String productCode, boolean fetchInStock) {
@@ -286,6 +290,11 @@ public class ProductService implements CatalogFacade {
         }
     }
 
+    /**
+     * Returns product details with optional stock availability. A requested lookup yields false for
+     * missing inventory or a null or nonpositive quantity; an absent facade leaves it null. Lookup
+     * failures propagate.
+     */
     private ProductResponse toResponse(Product product, boolean fetchInStock) {
         Boolean inStock = null;
         if (fetchInStock && inventoryFacade != null) {
@@ -308,6 +317,7 @@ public class ProductService implements CatalogFacade {
                 inStock);
     }
 
+    /** Returns product details with unknown stock availability without querying Inventory. */
     private ProductResponse toResponse(Product product) {
         return toResponse(product, false);
     }

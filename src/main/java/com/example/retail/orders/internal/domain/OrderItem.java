@@ -95,6 +95,10 @@ public class OrderItem implements Serializable {
         return this;
     }
 
+    /**
+     * Compares persistent classes and nonnull IDs, accounting for Hibernate proxies; identity is
+     * equal.
+     */
     @Override
     public final boolean equals(Object o) {
         if (this == o) {
@@ -118,6 +122,7 @@ public class OrderItem implements Serializable {
         return getId() != null && Objects.equals(getId(), orderItem.getId());
     }
 
+    /** Returns the persistent class hash, independent of the assigned ID and proxy class. */
     @Override
     public final int hashCode() {
         return this instanceof HibernateProxy proxy

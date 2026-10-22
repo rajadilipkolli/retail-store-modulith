@@ -128,6 +128,9 @@ public class OrdersFacadeImpl implements OrdersFacade {
         return result.response();
     }
 
+    /**
+     * Replays a matching completed claim or persists a new order and claim using catalog prices.
+     */
     private OrderIdempotency claimOrder(OrderRequest request, String key, String fingerprint) {
         var existing =
                 idempotencyRepository.findByCustomerIdAndIdempotencyKey(request.customerId(), key);
@@ -200,6 +203,13 @@ public class OrdersFacadeImpl implements OrdersFacade {
             String responsePayload,
             Order order) {}
 
+    /**
+     * Loads the order and claim, acquiring a five-minute lease for unfinished work.
+     *
+     * @throws IdempotencyConflictException if an unexpired lease is already owned
+     * @throws OrderNotFoundException if the referenced order is absent
+     * @throws java.util.NoSuchElementException if the claim is absent
+     */
     private ClaimWork acquireClaim(Long claimId) {
         return transactions.execute(
                 tx -> {
@@ -231,6 +241,7 @@ public class OrdersFacadeImpl implements OrdersFacade {
                 });
     }
 
+    /** Rejects a claim with an owner and a lease expiration strictly after the current time. */
     private static void requireAvailableClaim(OrderIdempotency claim) {
         if (claim.getClaimOwner() != null
                 && claim.getLeaseExpiresAt() != null
@@ -239,6 +250,13 @@ public class OrdersFacadeImpl implements OrdersFacade {
         }
     }
 
+    /**
+     * Renews the owned lease before running the action in a separate transaction.
+     *
+     * @throws IdempotencyConflictException if the claim no longer has the expected owner, status,
+     *     and unexpired lease
+     * @throws RuntimeException if the action fails
+     */
     private <T> T businessStep(ClaimWork work, Supplier<T> action) {
         LocalDateTime now = LocalDateTime.now();
         int renewed =
@@ -257,6 +275,11 @@ public class OrdersFacadeImpl implements OrdersFacade {
         return transactions.execute(step -> action.get());
     }
 
+    /**
+     * Processes or compensates a claimed order, or replays a terminal result. Reservation failures
+     * are returned in the result after recording compensation intent; other processing failures
+     * propagate after attempting to release the lease.
+     */
     private SagaResult process(Long claimId) {
         ClaimWork work = acquireClaim(claimId);
         if (work.owner() == null) {
@@ -342,6 +365,11 @@ public class OrdersFacadeImpl implements OrdersFacade {
         }
     }
 
+    /**
+     * Persists the order outcome and claim transition, publishing confirmation or rollback events.
+     *
+     * @throws IdempotencyConflictException if the expected processing lease is no longer owned
+     */
     private SagaResult complete(
             ClaimWork work, OrderStatus status, String source, RuntimeException failure) {
         return transactions.execute(
@@ -399,6 +427,12 @@ public class OrdersFacadeImpl implements OrdersFacade {
         return "order-" + orderId;
     }
 
+    /**
+     * Refunds or releases payment and restores inventory for recorded reservations.
+     *
+     * @throws IllegalStateException if a confirmed order lacks either reservation
+     * @throws RuntimeException if a status lookup or compensation step fails
+     */
     private void compensate(ClaimWork work) {
         Order order = work.order();
         String key = work.key();
@@ -436,6 +470,10 @@ public class OrdersFacadeImpl implements OrdersFacade {
         }
     }
 
+    /**
+     * Retries processing, compensation, and cancellation claims. A runtime failure for one claim is
+     * caught so later claims are still attempted; failure to load the claim list propagates.
+     */
     @Scheduled(fixedDelayString = "${orders.recovery.delay-ms:30000}")
     public void recoverPendingOrders() {
         for (var claim :
@@ -576,6 +614,7 @@ public class OrdersFacadeImpl implements OrdersFacade {
                 .toList();
     }
 
+    /** Hydrates orders in the ID page order, preserving its metadata and omitting missing rows. */
     private PagedResult<OrderResponse> mapIdsToPagedResult(Page<Long> page) {
         if (page.isEmpty()) {
             return new PagedResult<>(
@@ -612,6 +651,7 @@ public class OrdersFacadeImpl implements OrdersFacade {
                 page.hasPrevious());
     }
 
+    /** Returns order details with line totals rounded HALF_UP to two decimal places. */
     private OrderResponse toOrderResponse(Order order) {
         List<OrderItemResponse> itemResponses =
                 order.getItems() == null

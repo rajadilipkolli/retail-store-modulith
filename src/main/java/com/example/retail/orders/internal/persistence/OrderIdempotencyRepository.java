@@ -23,10 +23,16 @@ public interface OrderIdempotencyRepository extends JpaRepository<OrderIdempoten
 
     Optional<OrderIdempotency> findByOrderId(Long orderId);
 
+    /** Finds a claim with a pessimistic write lock, or empty if absent. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from OrderIdempotency i where i.id = :id")
     Optional<OrderIdempotency> findLockedById(@Param("id") Long id);
 
+    /**
+     * Renews only a matching owner and status with a lease strictly after now.
+     *
+     * @return the number of updated claims, zero if the ownership, status, or lease check fails
+     */
     @Modifying(clearAutomatically = true)
     @Query(
             """
@@ -37,6 +43,11 @@ public interface OrderIdempotencyRepository extends JpaRepository<OrderIdempoten
     int renewLease(
             Long id, String status, String owner, LocalDateTime now, LocalDateTime expiresAt);
 
+    /**
+     * Clears the lease for the matching owner and status, even if expired.
+     *
+     * @return the number of updated claims, zero if the owner or status does not match
+     */
     @Modifying(clearAutomatically = true)
     @Query(
             """
@@ -45,6 +56,12 @@ public interface OrderIdempotencyRepository extends JpaRepository<OrderIdempoten
             """)
     int releaseLease(Long id, String status, String owner);
 
+    /**
+     * Stores the outcome and clears the lease only for the matching owner and status with a lease
+     * strictly after now.
+     *
+     * @return the number of updated claims, zero if the ownership, status, or lease check fails
+     */
     @Modifying(clearAutomatically = true)
     @Query(
             """

@@ -291,14 +291,36 @@ public class InventoryService {
                 storedItems);
     }
 
+    /**
+     * Releases reserved units to existing inventory records; repeated release is a no-op.
+     *
+     * @throws InventoryNotFoundException if the reservation is absent
+     * @throws InvalidReservationTransitionException if the status is not RESERVED or RELEASED
+     * @throws ArithmeticException if restoring available units exceeds the integer range
+     * @throws tools.jackson.core.JacksonException if stored items cannot be read
+     */
     public InventoryReservationResult release(String idempotencyKey) {
         return restoreReservation(idempotencyKey, false);
     }
 
+    /**
+     * Releases reserved or consumed units using the original reservation key, once.
+     *
+     * @throws InventoryNotFoundException if the reservation or required inventory is absent
+     * @throws InvalidReservationTransitionException if the status is not RESERVED, CONSUMED, or
+     *     RELEASED
+     * @throws ArithmeticException if restoring available units exceeds the integer range
+     * @throws tools.jackson.core.JacksonException if stored items cannot be read
+     */
     public InventoryReservationResult cancelReservation(String idempotencyKey) {
         return restoreReservation(idempotencyKey, true);
     }
 
+    /**
+     * Restores available units and marks the locked reservation RELEASED.
+     *
+     * @param allowConsumed permits restocking consumed units and requires every inventory record
+     */
     private InventoryReservationResult restoreReservation(
             String idempotencyKey, boolean allowConsumed) {
         LOGGER.info("Processing release for idempotency key: {}", idempotencyKey);
@@ -371,6 +393,14 @@ public class InventoryService {
                 items);
     }
 
+    /**
+     * Marks reserved units consumed without changing available stock; repeated consumption is a
+     * no-op. Missing inventory records are skipped.
+     *
+     * @throws InventoryNotFoundException if the reservation is absent
+     * @throws InvalidReservationTransitionException if the status is not RESERVED or CONSUMED
+     * @throws tools.jackson.core.JacksonException if stored items cannot be read
+     */
     public InventoryReservationResult consume(String idempotencyKey) {
         LOGGER.info("Processing consume for idempotency key: {}", idempotencyKey);
         InventoryReservation reservation =

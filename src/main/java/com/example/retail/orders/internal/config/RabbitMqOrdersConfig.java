@@ -36,6 +36,7 @@ public class RabbitMqOrdersConfig {
         return QueueBuilder.durable(ORDERS_EVENTS_QUEUE).build();
     }
 
+    /** Creates a durable RabbitMQ stream queue with a seven-day maximum age. */
     @Bean
     public Queue ordersStreamQueue() {
         return QueueBuilder.durable(ORDERS_STREAM_QUEUE).stream()
@@ -53,6 +54,7 @@ public class RabbitMqOrdersConfig {
         return BindingBuilder.bind(ordersStreamQueue).to(ordersExchange).with("order.created");
     }
 
+    /** Configures stream consumers to start at the first retained entry. */
     @Bean
     public SimpleRabbitListenerContainerFactory orderStreamListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,

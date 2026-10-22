@@ -23,6 +23,16 @@ public class OrderRequestFingerprinter {
 
     public static final String FINGERPRINT_VERSION = "v1";
 
+    /**
+     * Returns a 64-character SHA-256 hex fingerprint of the versioned customer, items, and address
+     * representation. Text is trimmed and lowercased using the default locale; prices are rounded
+     * HALF_UP to two decimal places, with null prices treated as zero. Null items are ignored and
+     * items are sorted by normalized product code; equal codes retain their input order. A null
+     * item list is empty, a null address has its own marker, and null address fields become empty.
+     *
+     * @throws NullPointerException if the request or an item's product code is null
+     * @throws IllegalStateException if SHA-256 is unavailable
+     */
     public String computeFingerprint(OrderRequest request) {
         Objects.requireNonNull(request, "OrderRequest must not be null");
 

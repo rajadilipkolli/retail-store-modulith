@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class OrderExceptionHandler {
 
+    /** Returns an HTTP 404 problem detail with the exception message and current timestamp. */
     @ExceptionHandler(OrderNotFoundException.class)
     public ProblemDetail handleOrderNotFound(OrderNotFoundException ex) {
         ProblemDetail problem =
@@ -30,6 +31,7 @@ public class OrderExceptionHandler {
         return problem;
     }
 
+    /** Returns an HTTP 409 problem detail with the exception message and current timestamp. */
     @ExceptionHandler(IdempotencyConflictException.class)
     public ProblemDetail handleIdempotencyConflict(IdempotencyConflictException ex) {
         ProblemDetail problem =
@@ -40,6 +42,7 @@ public class OrderExceptionHandler {
         return problem;
     }
 
+    /** Returns an HTTP 400 problem detail with the exception message and current timestamp. */
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
         ProblemDetail problem =
