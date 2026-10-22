@@ -1,0 +1,24 @@
+/***
+<p>
+    Licensed under MIT License Copyright (c) 2026 Raja Kolli.
+</p>
+***/
+package com.example.retail.shared.orders;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import java.io.Serial;
+import java.io.Serializable;
+import java.util.List;
+
+public record OrderRequest(
+        @Positive(message = "CustomerId should be positive") Long customerId,
+        @NotEmpty(message = "Order without items not valid")
+                List<@NotNull @Valid OrderItemRequest> items,
+        @NotNull @Valid Address deliveryAddress)
+        implements Serializable {
+
+    @Serial private static final long serialVersionUID = 1L;
+}

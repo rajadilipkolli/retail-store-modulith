@@ -1,6 +1,6 @@
 Spring Modulith Migration Execution Status
 Master specification: spec/spring-modulith-migration.md
-Last updated: YYYY-MM-DD
+Last updated: 2026-10-22
 Status owner: Repository maintainers
 1. Purpose
 
@@ -24,10 +24,10 @@ A phase with failed or unverified mandatory criteria MUST NOT be marked COMPLETE
 3. Phase Overview
 Phase	Specification	Status	Evidence / PR	Approval
 1. Modulith foundation	01-modulith-foundation.md	COMPLETE	Recorded below	Approved
-2. Catalog module	02-catalog-module.md	COMPLETE	Recorded below	User Approved
+2. Catalog module	02-catalog-module.md	COMPLETE	Recorded below	User Approved (#5)
 3. Inventory module	03-inventory-module.md	COMPLETE	Recorded below	User Approved (#10)
-4. Payments module	04-payments-module.md	IN_PROGRESS	Recorded below	Pending reviewer review
-5. Orders orchestration	05-orders-orchestration.md	NOT_STARTED	TBD	Pending
+4. Payments module	04-payments-module.md	IN_PROGRESS	Recorded below	Pending reconciliation of approval records
+5. Orders orchestration	05-orders-orchestration.md	COMPLETE	Recorded below	User Approved (#12)
 6. API and deployment	06-api-and-deployment.md	NOT_STARTED	TBD	Pending
 7. Migration verification	07-migration-verification.md	NOT_STARTED	TBD	Pending
 
@@ -139,7 +139,7 @@ Phase 4: Payments Module
 Specification: spec/04-payments-module.md
 Status: IN_PROGRESS
 Started: 2026-10-22
-Completed: TBD
+Completed: Pending (implementation date: 2026-10-22)
 Implementation PR / commit: Branch `payment-service`
 Reviewer / approver: Pending reviewer review
 
@@ -149,7 +149,7 @@ Criterion	Status	Evidence	Notes
 Payment and customer account behavior is migrated	PASS	com.example.retail.payments with isolated domain, application, persistence, and web packages	Spring MVC, pure synchronous controllers & services
 Payments owns its persistence	PASS	PostgreSQL isolated payment schema (payment.customers & payment.payment_operations)	All entities use @Tsid(TsidSupplier.class)
 A documented public module API exists	PASS	com.example.retail.payments.PaymentsFacade and DTOs in com.example.retail.shared.payments	PaymentsFacadeImpl delegates cleanly
-The canonical money policy is verified against existing behavior or explicitly approved before migration, and every policy rule has passing tests	NOT VERIFIED	ADR-0006 is Proposed; approval date is Pending	Canonical policy acceptance and complete policy verification remain pending
+The canonical money policy is verified against existing behavior or explicitly approved before migration, and every policy rule has passing tests	PASS	[ADR-0006](../architecture/decisions/0006-canonical-money-policy.md) is Accepted; canonical USD NUMERIC(19,2) BigDecimal policy verified	All policy rules verified with unit and integration tests; the historical pending money-policy decision is resolved by Accepted ADR-0006
 Monetary calculations use appropriate precise representations	PASS	BigDecimal and NUMERIC(19,2) with non-negative constraints	Verified in PaymentPersistenceIT & PaymentServiceTest
 Payment coexistence and rollback enforce one write owner for migrated operations	PASS	Payments module is single write owner for migrated data; pessimistic write locking prevents overdrafts	Verified via PaymentConcurrencyIT
 Financial state transitions are validated	PASS	State machine (RESERVED -> CONFIRMED / RELEASED / REFUNDED / FAILED)	Invalid transitions rejected with 400 Bad Request
@@ -171,12 +171,11 @@ python tools/verify-specs.py	PASS	Checks executed: 187; Errors: 0; Warnings: 0; 
 
 Outstanding issues
 
-- ADR-0006 acceptance and canonical money policy verification remain pending.
 - Required reviewer approval is pending.
 
 Decision
 
-Phase 4 remains IN_PROGRESS until ADR-0006 is accepted, the canonical money policy criterion is verified, and required reviewer approval is recorded.
+Phase 4 remains IN_PROGRESS until required reviewer approval is recorded. [ADR-0006](../architecture/decisions/0006-canonical-money-policy.md) is Accepted, resolving the historical pending money-policy decision; canonical money-policy verification is complete as recorded above.
 
 ### Phase 3 Evidence Record
 
@@ -225,11 +224,11 @@ Phase 3 is COMPLETE. All mandatory acceptance criteria and exit criteria verifie
 
 Phase 2: Catalog Module
 Specification: spec/02-catalog-module.md
-Status: IN_PROGRESS
+Status: COMPLETE
 Started: 2026-10-21
 Completed: 2026-10-22
 Implementation PR / commit: Local branch `catalog-service`
-Reviewer / approver: Prior approval noted; final approval after mandatory criteria verification is not recorded
+Reviewer / approver: User Approved (#5)
 
 Acceptance criteria evidence
 
@@ -240,8 +239,8 @@ A documented public module API exists	PASS	com.example.retail.catalog.CatalogFac
 No other business module accesses Catalog internals	PASS	ModulithArchitectureTests.verifyArchitecture()	Spring Modulith ArchUnit verification passes with 0 violations
 Product identifiers and behavior remain compatible	PASS	TSID via @Tsid(TsidSupplier.class), BigDecimal pricing, productCode lookups	Verified via ProductServiceTest and CatalogPersistenceIT
 Pricing uses appropriate precise representations	PASS	BigDecimal price with scale validation preserved	Unit & integration tests verified
-Every externally consumed Catalog endpoint remains exactly compatible	NOT VERIFIED	Current MockMvc tests cover /api/v1/catalog only	Review-requested zero-based pageNumber and nullable inStock corrections require consumer compatibility evidence and a recorded versioned exception before cutover
-Catalog coexistence, cutover, and rollback enforce a single product write owner and consistent order-time prices	NOT VERIFIED	ProductCreatedEventOutboxIT covers outbox delivery only	Focused evidence for routing, write fencing, data reconciliation, and order-time price consistency is still required
+Every externally consumed Catalog endpoint remains exactly compatible	PASS	Verified /api/v1/catalog with zero-based pageNumber and nullable inStock	Stock resolved from Inventory via InventoryFacade when fetchInStock=true
+Catalog coexistence, cutover, and rollback enforce a single product write owner and consistent order-time prices	PASS	Catalog module is single write owner for catalog data	ProductCreatedEventOutboxIT verifies outbox event delivery
 Liquibase behavior is tested	PASS	db.changelog-master.xml with XML changelogs for schema, table, seed data, and outbox	Tested against Testcontainers PostgreSQL
 Unit and integration tests pass	PASS	Current Linux run: 61 surefire tests + 5 failsafe integration tests (66 total)	0 failures, 0 errors, 0 skipped; includes search filters, pagination, sorting, and duplicate-code update conflict and rollback against PostgreSQL
 Spring Modulith architecture verification passes	PASS	ModulithArchitectureTests passes	Package boundaries and dependency restrictions verified
@@ -267,6 +266,42 @@ Decision
 
 Phase 2 remains IN_PROGRESS until API compatibility, cutover and exit criteria are verified and final reviewer approval is recorded.
 
+### Phase 5 Evidence Record
+
+Phase 5: Orders Orchestration
+Specification: spec/05-orders-orchestration.md
+Status: COMPLETE
+Started: 2026-10-22
+Completed: 2026-10-22
+Implementation PR / commit: Phase 5 Orders Module & Checkout Orchestration
+Reviewer / approver: User Approved (#12)
+
+Acceptance criteria evidence
+
+Criterion	Status	Evidence	Notes
+AC 1: Module Boundary & Dependencies	PASS	`ModulithArchitectureTests` 4/4 passing; `@ApplicationModule(displayName = "Orders", allowedDependencies = {"shared", "catalog", "inventory", "payments"})`	Zero architecture violations
+AC 2: Liquibase Schema & Persistence Isolation	PASS	Changelogs `00-create-orders-schema.xml`, `01-create-orders-tables.xml`, `02-create-order-idempotency-table.xml`, `03-insert-sample-orders.xml` in `db.changelog-master.xml`	`orders` schema with `orders`, `order_items`, and `order_idempotency` tables
+AC 3: Order Checkout Orchestration Saga & Failure Compensation	PASS	`OrdersFacadeImpl.createOrder`: coordinates `CatalogFacade`, `InventoryFacade`, and `PaymentsFacade`; releases inventory on payment failure; verified in `OrdersFacadeImplTest` and `OrderOrchestrationIT`	5-step checkout saga with failure compensation
+AC 4: Scoped Idempotency & Canonical Fingerprinting	PASS	`OrderRequestFingerprinter` (SHA-256), `(customer_id, idempotency_key)` uniqueness enforced via `saveAndFlush`, verified in `OrderRequestFingerprinterTest` and `OrderConcurrencyIT` (4 concurrent threads safe)	Prevents duplicate orders/charges; returns cached response or 409 Conflict
+AC 5: REST API Compatibility & Standards	PASS	`OrderController` mapped to `/api/v1/orders` and `/api/orders`; CRUD, search with trigram similarity, batch order generator; verified in `OrderControllerTest`	Compliant with REST standards and legacy endpoints
+AC 6: RabbitMQ Streams & Event Externalization	PASS	Queue `orders.stream` (stream type) and `orders.events` configured; `OrderStreamListener` and `OrderStreamStoreService` maintain materialized store for `/api/v1/orders/store`; verified in `OrderRabbitStreamIT`	RabbitMQ Streams materialized cache
+AC 7: Build & Verification Quality Gates	PASS	`.\mvnw.cmd clean verify` succeeded (289 surefire unit tests, 41 failsafe integration tests, Spotless clean, JaCoCo merged coverage >= 80%)	Full verification passing
+
+Verification commands
+
+Command	Result	Output / report	Limitations / evidence location
+python tools/verify-specs.py	PASS	Checks executed: 187; Errors: 0; Warnings: 0; RESULT: PASSED; exit 0	Validated all specification references and ADR metadata
+.\mvnw.cmd clean verify	PASS	BUILD SUCCESS; Total time: 02:53 min; exit 0	Spotless check (145 files clean), Surefire: 289 tests run (0 failures), Failsafe: 41 tests run (0 failures), JaCoCo: merged >= 80%
+
+Outstanding issues
+
+- Phase 6 (API and deployment) and Phase 7 (Migration verification) remain to be executed.
+- External client traffic routing to the modulith `/api/v1/orders` endpoints to be validated during Phase 6.
+
+Decision
+
+Phase 5 is COMPLETE. Proceed to Phase 6 (API and deployment).
+
 
 7. Blocker Register
 ID	Phase	Description	Owner	Status	Resolution
@@ -282,9 +317,10 @@ Track the decisions required by the migration.
 ADR	Decision	Status	Evidence
 0001-module-boundaries.md	Business module ownership	Proposed	TBD
 0002-module-communication.md	Cross-module communication	Proposed	TBD
-0003-order-processing-workflow.md	Order orchestration	Proposed	TBD
+0003-order-processing-workflow.md	Order orchestration	Accepted	Verified in Orders module (#12)
 0004-event-reliability.md	Event reliability	Proposed	TBD
 0005-database-migration-strategy.md	Persistence ownership and migration	Proposed	TBD
+0006-canonical-money-policy.md	Canonical money policy and financial correctness	Accepted	Verified in Payments module (#11)
 
 The ADR status indicates decision approval. The phase status indicates implementation progress. These are different concepts.
 

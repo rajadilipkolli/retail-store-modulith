@@ -1,0 +1,33 @@
+/***
+<p>
+    Licensed under MIT License Copyright (c) 2026 Raja Kolli.
+</p>
+***/
+package com.example.retail.shared.orders;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import java.io.Serial;
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+public record OrderResponse(
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Long orderId,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Long customerId,
+        String status,
+        String source,
+        Address deliveryAddress,
+        LocalDateTime createdDate,
+        @JsonFormat(shape = JsonFormat.Shape.NUMBER_FLOAT, pattern = "0.00") BigDecimal totalPrice,
+        List<OrderItemResponse> items)
+        implements Serializable {
+
+    @Serial private static final long serialVersionUID = 1L;
+
+    /** Returns a SERVICE_UNAVAILABLE fallback with the supplied ID, zero total, and no items. */
+    public static OrderResponse emptyResponse(Long id) {
+        return new OrderResponse(
+                id, null, "SERVICE_UNAVAILABLE", null, null, null, BigDecimal.ZERO, List.of());
+    }
+}

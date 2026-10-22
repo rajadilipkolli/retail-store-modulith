@@ -50,6 +50,20 @@ class CatalogPersistenceIT {
         var byCodeResult = mockMvcTester.get().uri("/api/v1/catalog/product-code/P001");
         assertThat(byCodeResult).hasStatusOk();
         assertThat(byCodeResult).bodyJson().extractingPath("$.id").asString().isEqualTo("1");
+        assertThat(byCodeResult).bodyJson().extractingPath("$.inStock").isNull();
+
+        var byCodeWithStockResult =
+                mockMvcTester
+                        .get()
+                        .uri("/api/v1/catalog/product-code/P001")
+                        .param("fetchInStock", "true");
+        assertThat(byCodeWithStockResult).hasStatusOk();
+        assertThat(byCodeWithStockResult)
+                .bodyJson()
+                .extractingPath("$.id")
+                .asString()
+                .isEqualTo("1");
+        assertThat(byCodeWithStockResult).bodyJson().extractingPath("$.inStock").isEqualTo(true);
     }
 
     @Test

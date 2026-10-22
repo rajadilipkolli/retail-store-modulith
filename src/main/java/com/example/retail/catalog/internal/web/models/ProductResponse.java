@@ -12,8 +12,8 @@ import java.math.BigDecimal;
 /**
  * Catalog response.
  *
- * @param inStock unknown (null) until the Inventory API supplies availability; never inferred from
- *     a request flag
+ * @param inStock populated with stock availability if requested via {@code fetchInStock=true} and
+ *     supplied by the Inventory module; null if stock check was not requested
  */
 public record ProductResponse(
         @JsonFormat(shape = JsonFormat.Shape.STRING) Long id,

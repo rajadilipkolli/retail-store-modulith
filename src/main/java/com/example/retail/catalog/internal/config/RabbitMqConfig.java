@@ -40,9 +40,9 @@ public class RabbitMqConfig {
                 .with(PRODUCT_ROUTING_KEY_PATTERN);
     }
 
-    /** Creates a JSON converter that trusts types in the shared catalog package. */
+    /** Creates a JSON converter that trusts types in all shared packages. */
     @Bean
     public MessageConverter jsonMessageConverter() {
-        return new JacksonJsonMessageConverter("com.example.retail.shared.catalog");
+        return new JacksonJsonMessageConverter("com.example.retail.shared.*");
     }
 }

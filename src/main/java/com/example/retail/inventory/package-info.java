@@ -5,7 +5,7 @@
  */
 @ApplicationModule(
         displayName = "Inventory",
-        allowedDependencies = {"shared", "catalog"})
+        allowedDependencies = {"shared"})
 package com.example.retail.inventory;
 
 import org.springframework.modulith.ApplicationModule;

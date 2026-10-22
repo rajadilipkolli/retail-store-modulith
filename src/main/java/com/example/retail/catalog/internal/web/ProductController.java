@@ -73,14 +73,16 @@ public class ProductController {
 
     /**
      * Returns HTTP 200 with the matching product, or propagates a missing-product error handled as
-     * HTTP 404. The compatibility flag {@code fetchInStock} is ignored; stock remains null.
+     * HTTP 404. When {@code fetchInStock} is true, stock availability is resolved from the
+     * Inventory module.
      */
     @GetMapping(value = "/product-code/{productCode}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ProductResponse> getProductByProductCode(
             @PathVariable String productCode,
             @RequestParam(required = false, defaultValue = "false") Boolean fetchInStock) {
         return ResponseEntity.ok(
-                productService.findProductByProductCode(productCode, fetchInStock));
+                productService.findProductByProductCode(
+                        productCode, Boolean.TRUE.equals(fetchInStock)));
     }
 
     /**

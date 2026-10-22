@@ -20,8 +20,10 @@ import com.example.retail.catalog.internal.domain.ProductNotFoundException;
 import com.example.retail.catalog.internal.persistence.ProductRepository;
 import com.example.retail.catalog.internal.web.models.ProductRequest;
 import com.example.retail.catalog.internal.web.models.ProductResponse;
+import com.example.retail.inventory.InventoryFacade;
 import com.example.retail.shared.catalog.ProductCreatedEvent;
 import com.example.retail.shared.catalog.ProductDto;
+import com.example.retail.shared.inventory.InventoryResponse;
 import com.example.retail.shared.models.PagedResult;
 import java.math.BigDecimal;
 import java.sql.SQLException;
@@ -29,7 +31,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.hibernate.exception.ConstraintViolationException;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +40,7 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -55,12 +57,9 @@ class ProductServiceTest {
 
     @Mock private ApplicationEventPublisher eventPublisher;
 
-    private ProductService productService;
+    @Mock private InventoryFacade inventoryFacade;
 
-    @BeforeEach
-    void setUp() {
-        productService = new ProductService(productRepository, eventPublisher);
-    }
+    @InjectMocks private ProductService productService;
 
     @Test
     @DisplayName("findAllProducts returns paged products")
@@ -87,12 +86,14 @@ class ProductServiceTest {
                 new Product(
                         1L, "P001", "Product 1", "Desc 1", BigDecimal.valueOf(10.0), "img1.jpg");
         given(productRepository.findById(1L)).willReturn(Optional.of(p));
+        given(inventoryFacade.findInventoryByProductCode("P001"))
+                .willReturn(Optional.of(new InventoryResponse(1L, "P001", 5, 0)));
 
         ProductResponse response = productService.findProductByIdInternal(1L);
 
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.productCode()).isEqualTo("P001");
-        assertThat(response.inStock()).isNull();
+        assertThat(response.inStock()).isTrue();
     }
 
     @Test
@@ -206,6 +207,7 @@ class ProductServiceTest {
         assertThat(response.inStock()).isNull();
         assertThat(response.productName()).isEqualTo("Updated Name");
         assertThat(response.price()).isEqualTo(BigDecimal.valueOf(15.0));
+        verify(inventoryFacade, never()).findInventoryByProductCode(any());
     }
 
     @Test
@@ -259,13 +261,90 @@ class ProductServiceTest {
                 .isFalse();
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    void productCodeLookup_DoesNotTreatInventoryFlagAsStock(boolean fetchInStock) {
+    @Test
+    @DisplayName(
+            "findProductByProductCode with fetchInStock=false does not query inventory and returns"
+                    + " null inStock")
+    void productCodeLookup_FetchInStockFalse_ReturnsNullInStock() {
         given(productRepository.findByProductCode("P001"))
                 .willReturn(Optional.of(new Product(1L, "P001", "Name", null, null, null)));
-        assertThat(productService.findProductByProductCode("P001", fetchInStock).inStock())
-                .isNull();
+
+        ProductResponse response = productService.findProductByProductCode("P001", false);
+
+        assertThat(response.inStock()).isNull();
+        verify(inventoryFacade, never()).findInventoryByProductCode(any());
+    }
+
+    @Test
+    @DisplayName(
+            "findProductByProductCode with fetchInStock=true and positive stock returns true"
+                    + " inStock")
+    void productCodeLookup_FetchInStockTrue_PositiveStock_ReturnsTrue() {
+        given(productRepository.findByProductCode("P001"))
+                .willReturn(Optional.of(new Product(1L, "P001", "Name", null, null, null)));
+        given(inventoryFacade.findInventoryByProductCode("P001"))
+                .willReturn(Optional.of(new InventoryResponse(10L, "P001", 5, 0)));
+
+        ProductResponse response = productService.findProductByProductCode("P001", true);
+
+        assertThat(response.inStock()).isTrue();
+        verify(inventoryFacade).findInventoryByProductCode("P001");
+    }
+
+    @Test
+    @DisplayName(
+            "findProductByProductCode with fetchInStock=true and zero stock returns false inStock")
+    void productCodeLookup_FetchInStockTrue_ZeroStock_ReturnsFalse() {
+        given(productRepository.findByProductCode("P001"))
+                .willReturn(Optional.of(new Product(1L, "P001", "Name", null, null, null)));
+        given(inventoryFacade.findInventoryByProductCode("P001"))
+                .willReturn(Optional.of(new InventoryResponse(10L, "P001", 0, 0)));
+
+        ProductResponse response = productService.findProductByProductCode("P001", true);
+
+        assertThat(response.inStock()).isFalse();
+    }
+
+    @Test
+    @DisplayName(
+            "findProductByProductCode with fetchInStock=true and null availableQuantity returns"
+                    + " false inStock")
+    void productCodeLookup_FetchInStockTrue_NullAvailableQuantity_ReturnsFalse() {
+        given(productRepository.findByProductCode("P001"))
+                .willReturn(Optional.of(new Product(1L, "P001", "Name", null, null, null)));
+        given(inventoryFacade.findInventoryByProductCode("P001"))
+                .willReturn(Optional.of(new InventoryResponse(10L, "P001", null, 0)));
+
+        ProductResponse response = productService.findProductByProductCode("P001", true);
+
+        assertThat(response.inStock()).isFalse();
+    }
+
+    @Test
+    @DisplayName(
+            "findProductByProductCode with fetchInStock=true and missing inventory returns false"
+                    + " inStock")
+    void productCodeLookup_FetchInStockTrue_MissingInventory_ReturnsFalse() {
+        given(productRepository.findByProductCode("P001"))
+                .willReturn(Optional.of(new Product(1L, "P001", "Name", null, null, null)));
+        given(inventoryFacade.findInventoryByProductCode("P001")).willReturn(Optional.empty());
+
+        ProductResponse response = productService.findProductByProductCode("P001", true);
+
+        assertThat(response.inStock()).isFalse();
+    }
+
+    @Test
+    @DisplayName("findProductByProductCode with null inventoryFacade returns null inStock")
+    void productCodeLookup_NullInventoryFacade_ReturnsNullInStock() {
+        ProductService fallbackService =
+                new ProductService(productRepository, eventPublisher, null);
+        given(productRepository.findByProductCode("P001"))
+                .willReturn(Optional.of(new Product(1L, "P001", "Name", null, null, null)));
+
+        ProductResponse response = fallbackService.findProductByProductCode("P001", true);
+
+        assertThat(response.inStock()).isNull();
     }
 
     @ParameterizedTest

@@ -149,6 +149,20 @@ public interface InventoryFacade {
     InventoryReservationResult consume(String idempotencyKey);
 
     /**
+     * Releases reserved stock or restocks consumed stock once, keyed by the original reservation.
+     * Repeated cancellation returns RELEASED without changing stock again. Restocking consumed
+     * units leaves the reserved quantity unchanged.
+     *
+     * @throws com.example.retail.inventory.internal.domain.InventoryNotFoundException if the key
+     *     has no reservation or an inventory record needed for restoration is missing
+     * @throws com.example.retail.inventory.internal.domain.InvalidReservationTransitionException if
+     *     the status is not RESERVED, CONSUMED, or RELEASED
+     * @throws ArithmeticException if restoring available units exceeds the integer range
+     * @throws tools.jackson.core.JacksonException if stored items cannot be read
+     */
+    InventoryReservationResult cancelReservation(String idempotencyKey);
+
+    /**
      * Returns the stored status and items, or an empty result when the key has no reservation.
      *
      * @throws tools.jackson.core.JacksonException if stored items cannot be read

@@ -90,6 +90,11 @@ public class InventoryFacadeImpl implements InventoryFacade {
     }
 
     @Override
+    public InventoryReservationResult cancelReservation(String idempotencyKey) {
+        return inventoryService.cancelReservation(idempotencyKey);
+    }
+
+    @Override
     public InventoryReservationResult consume(String idempotencyKey) {
         return inventoryService.consume(idempotencyKey);
     }

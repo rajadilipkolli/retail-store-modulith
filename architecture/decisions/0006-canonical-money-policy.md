@@ -1,5 +1,5 @@
 ADR-0006: Define Canonical Money Policy and Financial Correctness
-Status: Proposed
+Status: Accepted
 Date: 2026-10-22
 Decision owners: Repository maintainers
 Related specifications: spec/04-payments-module.md, spec/05-orders-orchestration.md

@@ -80,9 +80,10 @@ com.example.retail
   - Implements concurrency control, reservation state transitions, and asynchronous event outbox processing.
 
 - **`orders` (`com.example.retail.orders`)**
-  - Orchestrates the order lifecycle and cross-module checkout workflows.
-  - Coordinates reservations with `inventory`, validations with `catalog`, and charges with `payments`.
-  - Implements compensation logic for partial order failures.
+  - Orchestrates the order lifecycle and cross-module checkout workflows across `catalog`, `inventory`, and `payments`.
+  - Owns the dedicated `orders` database schema (`orders`, `order_items`, `order_idempotency`).
+  - Implements failure compensation (e.g., releasing reserved stock when payment fails) and customer-scoped idempotency with canonical SHA-256 request fingerprinting.
+  - Integrates RabbitMQ Streams (`orders.stream`) and provides materialized stream querying at `/api/v1/orders/store`.
 
 - **`payments` (`com.example.retail.payments`)**
   - Handles customer balances, payment authorizations, capture, and refunds.
@@ -117,15 +118,16 @@ graph TD
     Orders --> Payments
     Orders --> Shared
 
-    Inventory --> Shared
+    Catalog -->|stock availability: InventoryFacade| Inventory
     Catalog --> Shared
+    Inventory --> Shared
     Payments --> Shared
 ```
 
 1. **Intended Dependency Direction:**
    - **`orders`** may depend on the public APIs of **`catalog`**, **`inventory`**, and **`payments`**.
    - **`catalog`**, **`inventory`**, and **`payments`** **MUST NOT** depend on `orders`, including its public APIs or internal packages.
-   - **`catalog`** and **`inventory`** maintain strict independence (except explicitly permitted read-only catalog lookups where specified).
+   - **`catalog`** and **`inventory`** maintain strict independence, except that **`catalog`** may call the **`inventory`** public API ([`InventoryFacade.findInventoryByProductCode`](src/main/java/com/example/retail/inventory/InventoryFacade.java)) for read-only stock availability checks (`inStock` resolution); **`inventory`** must never depend on **`catalog`**.
    - **`shared`** is an open contract module and must never depend on any business module.
 2. **Encapsulation & Public APIs:**
    - Only classes in the module's root package (or explicitly documented public API packages) are accessible externally.
@@ -154,22 +156,22 @@ graph TD
 
 ## Repository Guide & Documentation
 
-| Path | Purpose |
-|---|---|
-| [`AGENTS.md`](AGENTS.md) | Shared engineering rules and constraints for all AI coding assistants |
-| [`GEMINI.md`](GEMINI.md) | Gemini CLI instructions and SDD compliance rules |
-| [`spec/spring-modulith-migration.md`](spec/spring-modulith-migration.md) | Master migration specification and architectural blueprint |
-| [`spec/execution-status.md`](spec/execution-status.md) | Phase status tracking, blockers, and verification evidence |
-| [`spec/01-modulith-foundation.md`](spec/01-modulith-foundation.md) | Phase 1: Modulith Foundation & architecture verification |
-| [`spec/02-catalog-module.md`](spec/02-catalog-module.md) | Phase 2: Catalog Module migration |
-| [`spec/03-inventory-module.md`](spec/03-inventory-module.md) | Phase 3: Inventory Module migration |
-| [`spec/04-payments-module.md`](spec/04-payments-module.md) | Phase 4: Payments Module migration |
-| [`spec/05-orders-orchestration.md`](spec/05-orders-orchestration.md) | Phase 5: Orders Orchestration & checkout workflow |
-| [`spec/06-api-and-deployment.md`](spec/06-api-and-deployment.md) | Phase 6: API Compatibility, security, and deployment assets |
-| [`spec/07-migration-verification.md`](spec/07-migration-verification.md) | Phase 7: Cutover readiness, parity testing, and verification |
-| [`ai/skills/`](ai/skills/) | Reusable SDD, Spring Modulith, TDD, and verification skills |
-| [`architecture/decisions/`](architecture/decisions/) | Architecture Decision Records (ADRs) |
-| [`tools/verify-specs.py`](tools/verify-specs.py) | Python validator for specification consistency and link integrity |
+| Path                                                                     | Purpose                                                               |
+|--------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| [`AGENTS.md`](AGENTS.md)                                                 | Shared engineering rules and constraints for all AI coding assistants |
+| [`GEMINI.md`](GEMINI.md)                                                 | Gemini CLI instructions and SDD compliance rules                      |
+| [`spec/spring-modulith-migration.md`](spec/spring-modulith-migration.md) | Master migration specification and architectural blueprint            |
+| [`spec/execution-status.md`](spec/execution-status.md)                   | Phase status tracking, blockers, and verification evidence            |
+| [`spec/01-modulith-foundation.md`](spec/01-modulith-foundation.md)       | Phase 1: Modulith Foundation & architecture verification              |
+| [`spec/02-catalog-module.md`](spec/02-catalog-module.md)                 | Phase 2: Catalog Module migration                                     |
+| [`spec/03-inventory-module.md`](spec/03-inventory-module.md)             | Phase 3: Inventory Module migration                                   |
+| [`spec/04-payments-module.md`](spec/04-payments-module.md)               | Phase 4: Payments Module migration                                    |
+| [`spec/05-orders-orchestration.md`](spec/05-orders-orchestration.md)     | Phase 5: Orders Orchestration & checkout workflow                     |
+| [`spec/06-api-and-deployment.md`](spec/06-api-and-deployment.md)         | Phase 6: API Compatibility, security, and deployment assets           |
+| [`spec/07-migration-verification.md`](spec/07-migration-verification.md) | Phase 7: Cutover readiness, parity testing, and verification          |
+| [`ai/skills/`](ai/skills/)                                               | Reusable SDD, Spring Modulith, TDD, and verification skills           |
+| [`architecture/decisions/`](architecture/decisions/)                     | Architecture Decision Records (ADRs)                                  |
+| [`tools/verify-specs.py`](tools/verify-specs.py)                         | Python validator for specification consistency and link integrity     |
 
 ---
 
@@ -251,15 +253,15 @@ All development in this repository strictly adheres to SDD:
 
 ## Migration Phase Discipline
 
-| Phase | Module / Focus | Status | Specification |
-|:---:|---|:---:|---|
-| **1** | Modulith Foundation & Architecture Verification | `COMPLETE` | [`spec/01-modulith-foundation.md`](spec/01-modulith-foundation.md) |
-| **2** | Catalog Module | `IN_PROGRESS` | [`spec/02-catalog-module.md`](spec/02-catalog-module.md) |
-| **3** | Inventory Module | `IN_PROGRESS` | [`spec/03-inventory-module.md`](spec/03-inventory-module.md) |
-| **4** | Payments Module | `NOT_STARTED` | [`spec/04-payments-module.md`](spec/04-payments-module.md) |
-| **5** | Orders Orchestration & Checkout | `NOT_STARTED` | [`spec/05-orders-orchestration.md`](spec/05-orders-orchestration.md) |
-| **6** | API Compatibility & Deployment | `NOT_STARTED` | [`spec/06-api-and-deployment.md`](spec/06-api-and-deployment.md) |
-| **7** | Migration Verification & Cutover Readiness | `NOT_STARTED` | [`spec/07-migration-verification.md`](spec/07-migration-verification.md) |
+| Phase | Module / Focus                                  |    Status     | Specification                                                            |
+|:-----:|-------------------------------------------------|:-------------:|--------------------------------------------------------------------------|
+| **1** | Modulith Foundation & Architecture Verification |  `COMPLETE`   | [`spec/01-modulith-foundation.md`](spec/01-modulith-foundation.md)       |
+| **2** | Catalog Module                                  |  `COMPLETE`   | [`spec/02-catalog-module.md`](spec/02-catalog-module.md)                 |
+| **3** | Inventory Module                                |  `COMPLETE`   | [`spec/03-inventory-module.md`](spec/03-inventory-module.md)             |
+| **4** | Payments Module                                 |  `COMPLETE`   | [`spec/04-payments-module.md`](spec/04-payments-module.md)               |
+| **5** | Orders Orchestration & Checkout                 |  `COMPLETE`   | [`spec/05-orders-orchestration.md`](spec/05-orders-orchestration.md)     |
+| **6** | API Compatibility & Deployment                  | `NOT_STARTED` | [`spec/06-api-and-deployment.md`](spec/06-api-and-deployment.md)         |
+| **7** | Migration Verification & Cutover Readiness      | `NOT_STARTED` | [`spec/07-migration-verification.md`](spec/07-migration-verification.md) |
 
 > [!IMPORTANT]
 > Do not retire legacy microservices or delete deployment assets until Phase 7 verification is complete and explicit stakeholder approval is recorded.

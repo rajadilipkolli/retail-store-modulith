@@ -524,7 +524,8 @@ class InventoryServiceTest {
     @Test
     @DisplayName("release throws InventoryNotFoundException when reservation is not found")
     void release_NotFound() {
-        given(reservationRepository.findByIdempotencyKey("key-none")).willReturn(Optional.empty());
+        given(reservationRepository.findLockedByIdempotencyKey("key-none"))
+                .willReturn(Optional.empty());
         assertThatThrownBy(() -> inventoryService.release("key-none"))
                 .isInstanceOf(InventoryNotFoundException.class);
     }
@@ -542,7 +543,8 @@ class InventoryServiceTest {
                         json,
                         Instant.now(),
                         Instant.now());
-        given(reservationRepository.findByIdempotencyKey("key-rel")).willReturn(Optional.of(res));
+        given(reservationRepository.findLockedByIdempotencyKey("key-rel"))
+                .willReturn(Optional.of(res));
 
         InventoryReservationResult result = inventoryService.release("key-rel");
         assertThat(result.status()).isEqualTo(InventoryReservationStatus.RELEASED);
@@ -562,7 +564,7 @@ class InventoryServiceTest {
                         json,
                         Instant.now(),
                         Instant.now());
-        given(reservationRepository.findByIdempotencyKey("key-c"))
+        given(reservationRepository.findLockedByIdempotencyKey("key-c"))
                 .willReturn(Optional.of(consumed));
         assertThatThrownBy(() -> inventoryService.release("key-c"))
                 .isInstanceOf(InvalidReservationTransitionException.class);
@@ -576,7 +578,8 @@ class InventoryServiceTest {
                         json,
                         Instant.now(),
                         Instant.now());
-        given(reservationRepository.findByIdempotencyKey("key-f")).willReturn(Optional.of(failed));
+        given(reservationRepository.findLockedByIdempotencyKey("key-f"))
+                .willReturn(Optional.of(failed));
         assertThatThrownBy(() -> inventoryService.release("key-f"))
                 .isInstanceOf(InvalidReservationTransitionException.class);
     }
@@ -594,7 +597,7 @@ class InventoryServiceTest {
                         json,
                         Instant.now(),
                         Instant.now());
-        given(reservationRepository.findByIdempotencyKey("key-ok"))
+        given(reservationRepository.findLockedByIdempotencyKey("key-ok"))
                 .willReturn(Optional.of(reserved));
 
         Inventory inv = new Inventory(1L, "P001", 8, 2);
@@ -614,7 +617,8 @@ class InventoryServiceTest {
     @Test
     @DisplayName("consume throws InventoryNotFoundException when reservation is not found")
     void consume_NotFound() {
-        given(reservationRepository.findByIdempotencyKey("key-none")).willReturn(Optional.empty());
+        given(reservationRepository.findLockedByIdempotencyKey("key-none"))
+                .willReturn(Optional.empty());
         assertThatThrownBy(() -> inventoryService.consume("key-none"))
                 .isInstanceOf(InventoryNotFoundException.class);
     }
@@ -632,7 +636,8 @@ class InventoryServiceTest {
                         json,
                         Instant.now(),
                         Instant.now());
-        given(reservationRepository.findByIdempotencyKey("key-con")).willReturn(Optional.of(res));
+        given(reservationRepository.findLockedByIdempotencyKey("key-con"))
+                .willReturn(Optional.of(res));
 
         InventoryReservationResult result = inventoryService.consume("key-con");
         assertThat(result.status()).isEqualTo(InventoryReservationStatus.CONSUMED);
@@ -652,7 +657,7 @@ class InventoryServiceTest {
                         json,
                         Instant.now(),
                         Instant.now());
-        given(reservationRepository.findByIdempotencyKey("key-r"))
+        given(reservationRepository.findLockedByIdempotencyKey("key-r"))
                 .willReturn(Optional.of(released));
         assertThatThrownBy(() -> inventoryService.consume("key-r"))
                 .isInstanceOf(InvalidReservationTransitionException.class);
@@ -666,7 +671,8 @@ class InventoryServiceTest {
                         json,
                         Instant.now(),
                         Instant.now());
-        given(reservationRepository.findByIdempotencyKey("key-f")).willReturn(Optional.of(failed));
+        given(reservationRepository.findLockedByIdempotencyKey("key-f"))
+                .willReturn(Optional.of(failed));
         assertThatThrownBy(() -> inventoryService.consume("key-f"))
                 .isInstanceOf(InvalidReservationTransitionException.class);
     }
@@ -684,7 +690,7 @@ class InventoryServiceTest {
                         json,
                         Instant.now(),
                         Instant.now());
-        given(reservationRepository.findByIdempotencyKey("key-ok"))
+        given(reservationRepository.findLockedByIdempotencyKey("key-ok"))
                 .willReturn(Optional.of(reserved));
 
         Inventory inv = new Inventory(1L, "P001", 8, 2);
@@ -720,5 +726,48 @@ class InventoryServiceTest {
 
         assertThat(inventoryService.getReservationStatus("key-status")).isPresent();
         assertThat(inventoryService.getReservationStatus("unknown")).isEmpty();
+    }
+
+    @Test
+    void cancellationRestocksConsumedInventoryOnlyOnce() {
+        var reservation =
+                new InventoryReservation(
+                        null,
+                        "cancel",
+                        1L,
+                        InventoryReservationStatus.CONSUMED,
+                        objectMapper.writeValueAsString(List.of(new ReservationItem("P001", 2))),
+                        Instant.now(),
+                        Instant.now());
+        given(reservationRepository.findLockedByIdempotencyKey("cancel"))
+                .willReturn(Optional.of(reservation));
+        Inventory inventory = new Inventory(1L, "P001", 8, 3);
+        given(inventoryRepository.findWithLockByProductCodeIn(List.of("P001")))
+                .willReturn(List.of(inventory));
+        inventoryService.cancelReservation("cancel");
+        inventoryService.cancelReservation("cancel");
+        assertThat(inventory.getAvailableQuantity()).isEqualTo(10);
+        assertThat(inventory.getReservedItems()).isEqualTo(3);
+        assertThat(reservation.getStatus()).isEqualTo(InventoryReservationStatus.RELEASED);
+    }
+
+    @Test
+    void cancellationDoesNotCompleteIfConsumedProductInventoryIsMissing() {
+        var reservation =
+                new InventoryReservation(
+                        null,
+                        "cancel-missing",
+                        1L,
+                        InventoryReservationStatus.CONSUMED,
+                        objectMapper.writeValueAsString(List.of(new ReservationItem("P001", 2))),
+                        Instant.now(),
+                        Instant.now());
+        given(reservationRepository.findLockedByIdempotencyKey("cancel-missing"))
+                .willReturn(Optional.of(reservation));
+        given(inventoryRepository.findWithLockByProductCodeIn(List.of("P001")))
+                .willReturn(List.of());
+        assertThatThrownBy(() -> inventoryService.cancelReservation("cancel-missing"))
+                .isInstanceOf(InventoryNotFoundException.class);
+        assertThat(reservation.getStatus()).isEqualTo(InventoryReservationStatus.CONSUMED);
     }
 }
