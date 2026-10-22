@@ -6,10 +6,10 @@
 package com.example.retail.catalog.internal.web;
 
 import com.example.retail.catalog.internal.application.ProductService;
-import com.example.retail.catalog.internal.web.models.PagedResult;
 import com.example.retail.catalog.internal.web.models.ProductExistsResponse;
 import com.example.retail.catalog.internal.web.models.ProductRequest;
 import com.example.retail.catalog.internal.web.models.ProductResponse;
+import com.example.retail.shared.models.PagedResult;
 import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import java.net.URI;

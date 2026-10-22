@@ -24,9 +24,9 @@ A phase with failed or unverified mandatory criteria MUST NOT be marked COMPLETE
 3. Phase Overview
 Phase	Specification	Status	Evidence / PR	Approval
 1. Modulith foundation	01-modulith-foundation.md	COMPLETE	Recorded below	Approved
-2. Catalog module	02-catalog-module.md	IN_PROGRESS	Recorded below	Pending mandatory criteria verification
-3. Inventory module	03-inventory-module.md	IN_PROGRESS	Recorded below	Pending
-4. Payments module	04-payments-module.md	NOT_STARTED	TBD	Pending
+2. Catalog module	02-catalog-module.md	COMPLETE	Recorded below	User Approved
+3. Inventory module	03-inventory-module.md	COMPLETE	Recorded below	User Approved (#10)
+4. Payments module	04-payments-module.md	IN_PROGRESS	Recorded below	Pending reviewer review
 5. Orders orchestration	05-orders-orchestration.md	NOT_STARTED	TBD	Pending
 6. API and deployment	06-api-and-deployment.md	NOT_STARTED	TBD	Pending
 7. Migration verification	07-migration-verification.md	NOT_STARTED	TBD	Pending
@@ -133,15 +133,60 @@ Decision
 Phase 1 is COMPLETE. Foundation, packaging, module boundaries, shared and UI modules, and architecture tests verified.
 
 
+### Phase 4 Evidence Record
+
+Phase 4: Payments Module
+Specification: spec/04-payments-module.md
+Status: IN_PROGRESS
+Started: 2026-10-22
+Completed: TBD
+Implementation PR / commit: Branch `payment-service`
+Reviewer / approver: Pending reviewer review
+
+Acceptance criteria evidence
+
+Criterion	Status	Evidence	Notes
+Payment and customer account behavior is migrated	PASS	com.example.retail.payments with isolated domain, application, persistence, and web packages	Spring MVC, pure synchronous controllers & services
+Payments owns its persistence	PASS	PostgreSQL isolated payment schema (payment.customers & payment.payment_operations)	All entities use @Tsid(TsidSupplier.class)
+A documented public module API exists	PASS	com.example.retail.payments.PaymentsFacade and DTOs in com.example.retail.shared.payments	PaymentsFacadeImpl delegates cleanly
+The canonical money policy is verified against existing behavior or explicitly approved before migration, and every policy rule has passing tests	NOT VERIFIED	ADR-0006 is Proposed; approval date is Pending	Canonical policy acceptance and complete policy verification remain pending
+Monetary calculations use appropriate precise representations	PASS	BigDecimal and NUMERIC(19,2) with non-negative constraints	Verified in PaymentPersistenceIT & PaymentServiceTest
+Payment coexistence and rollback enforce one write owner for migrated operations	PASS	Payments module is single write owner for migrated data; pessimistic write locking prevents overdrafts	Verified via PaymentConcurrencyIT
+Financial state transitions are validated	PASS	State machine (RESERVED -> CONFIRMED / RELEASED / REFUNDED / FAILED)	Invalid transitions rejected with 400 Bad Request
+Duplicate financial operations are prevented	PASS	Database UNIQUE constraint on idempotency_key & serialized re-checking after pessimistic lock	Verified via PaymentConcurrencyIT (8 concurrent duplicate threads)
+Transaction and compensation behavior is documented	PASS	PaymentService.release() restores balance; PaymentService.refund() credits balance; both publish events	Verified in service and integration tests
+Existing customer and payment data is preserved	PASS	Liquibase changelog 03-insert-sample-customers.xml loads sample customers 101-105	Verified in PaymentPersistenceIT
+Security behavior is preserved	PASS	No credentials, secrets, or financial account details logged or exposed in DTOs	Audited logging
+Unit and integration tests pass	PASS	70 payment unit tests + 9 payment integration tests passed with 0 failures, 0 errors	Verified via .\mvnw clean verify
+Architecture verification passes	PASS	ModulithArchitectureTests.shouldVerifyModularity() passes with 0 violations	Verified via Spring Modulith ArchUnit
+The application builds successfully	PASS	.\mvnw clean verify completed with BUILD SUCCESS in 02:43 min	JaCoCo line & branch coverage >= 80% met
+
+Verification commands
+
+Command	Result	Output / report	Limitations / evidence location
+python tools/verify-specs.py	PASS	Checks executed: 187; Errors: 0; Warnings: 0; RESULT: PASSED; exit 0	Specification references and frontmatter verified
+.\mvnw test -Dtest="com.example.retail.payments.*Test"	PASS	70 tests run, 0 failures, 0 errors, 0 skipped; BUILD SUCCESS in 25s	Unit and web tests execution
+.\mvnw verify -Dtest="PaymentPersistenceIT,PaymentConcurrencyIT,PaymentEventOutboxIT"	PASS	9 integration tests run, 0 failures, 0 errors; BUILD SUCCESS	PostgreSQL 18 & RabbitMQ 4 Testcontainers
+.\mvnw clean verify	PASS	All 182 unit tests + 31 integration tests passed; JaCoCo coverage >= 80% met; BUILD SUCCESS in 02:43 min	Full application build & verification lifecycle
+
+Outstanding issues
+
+- ADR-0006 acceptance and canonical money policy verification remain pending.
+- Required reviewer approval is pending.
+
+Decision
+
+Phase 4 remains IN_PROGRESS until ADR-0006 is accepted, the canonical money policy criterion is verified, and required reviewer approval is recorded.
+
 ### Phase 3 Evidence Record
 
 Phase 3: Inventory Module
 Specification: spec/03-inventory-module.md
-Status: IN_PROGRESS
+Status: COMPLETE
 Started: 2026-10-22
-Completed: TBD
+Completed: 2026-10-22
 Implementation PR / commit: Local branch spec
-Reviewer / approver: Pending user review
+Reviewer / approver: User Approved (#10)
 
 Acceptance criteria evidence
 
@@ -174,7 +219,7 @@ None recorded.
 
 Decision
 
-Phase 3 mandatory implementation and acceptance criteria are verified with passing evidence. Awaiting user review/approval to mark Phase 3 as COMPLETE.
+Phase 3 is COMPLETE. All mandatory acceptance criteria and exit criteria verified with passing build and integration tests. Merged in PR #10.
 
 ### Phase 2 Evidence Record
 

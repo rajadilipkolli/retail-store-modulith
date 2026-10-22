@@ -7,11 +7,13 @@ package com.example.retail.inventory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 import com.example.retail.catalog.ContainersConfig;
 import com.example.retail.inventory.internal.domain.InventoryReservation;
 import com.example.retail.inventory.internal.persistence.InventoryReservationRepository;
 import com.example.retail.shared.inventory.InventoryReservationStatus;
+import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -136,5 +138,46 @@ class InventoryPersistenceIT {
                         null, key, 100L, InventoryReservationStatus.RESERVED, "[]", now, now);
         assertThatThrownBy(() -> reservationRepository.saveAndFlush(r2))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("ProductCreatedEvent auto-initializes zero inventory for the new product")
+    void productCreatedEvent_AutoInitializesZeroInventory() {
+        String newProductCode = "AUTO_INIT_" + System.currentTimeMillis();
+        String json =
+                """
+                {
+                    "productCode": "%s",
+                    "productName": "Auto Initialized Phone",
+                    "description": "Phone for auto-init test",
+                    "imageUrl": "https://example.com/img.jpg",
+                    "price": 499.99
+                }
+                """
+                        .formatted(newProductCode);
+
+        assertThat(
+                        mockMvcTester
+                                .post()
+                                .uri("/api/v1/catalog")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(json))
+                .hasStatus(HttpStatus.CREATED);
+
+        await().atMost(Duration.ofSeconds(5))
+                .untilAsserted(
+                        () -> {
+                            var invResult =
+                                    mockMvcTester.get().uri("/api/v1/inventory/" + newProductCode);
+                            assertThat(invResult).hasStatusOk();
+                            assertThat(invResult)
+                                    .bodyJson()
+                                    .extractingPath("$.availableQuantity")
+                                    .isEqualTo(0);
+                            assertThat(invResult)
+                                    .bodyJson()
+                                    .extractingPath("$.reservedItems")
+                                    .isEqualTo(0);
+                        });
     }
 }
