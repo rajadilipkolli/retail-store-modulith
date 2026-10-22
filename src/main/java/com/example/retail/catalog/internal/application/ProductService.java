@@ -12,6 +12,7 @@ import com.example.retail.catalog.internal.domain.ProductNotFoundException;
 import com.example.retail.catalog.internal.persistence.ProductRepository;
 import com.example.retail.catalog.internal.web.models.ProductRequest;
 import com.example.retail.catalog.internal.web.models.ProductResponse;
+import com.example.retail.inventory.InventoryFacade;
 import com.example.retail.shared.catalog.ProductCreatedEvent;
 import com.example.retail.shared.catalog.ProductDto;
 import com.example.retail.shared.models.PagedResult;
@@ -40,11 +41,15 @@ public class ProductService implements CatalogFacade {
 
     private final ProductRepository productRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final InventoryFacade inventoryFacade;
 
     public ProductService(
-            ProductRepository productRepository, ApplicationEventPublisher eventPublisher) {
+            ProductRepository productRepository,
+            ApplicationEventPublisher eventPublisher,
+            InventoryFacade inventoryFacade) {
         this.productRepository = productRepository;
         this.eventPublisher = eventPublisher;
+        this.inventoryFacade = inventoryFacade;
     }
 
     // -------------------------------------------------------------------------
@@ -98,29 +103,29 @@ public class ProductService implements CatalogFacade {
     }
 
     /**
-     * Returns the product for the web API with unknown (null) stock availability.
+     * Returns the product for the web API with stock availability resolved from Inventory.
      *
      * @throws ProductNotFoundException if no product has the supplied ID
      */
     public ProductResponse findProductByIdInternal(Long id) {
         return productRepository
                 .findById(id)
-                .map(this::toResponse)
+                .map(product -> toResponse(product, true))
                 .orElseThrow(() -> new ProductNotFoundException(id));
     }
 
-    // fetchInStock is retained for API compatibility; inventory is unknown until supplied by
-    // Inventory.
     /**
-     * Returns the matching product with unknown (null) stock availability.
+     * Returns the matching product, optionally resolving stock availability from Inventory.
      *
-     * @param fetchInStock compatibility flag; currently ignored because Inventory is not queried
+     * @param productCode product code to find
+     * @param fetchInStock if {@code true}, queries {@link InventoryFacade} to determine if
+     *     available quantity > 0; otherwise stock is returned as {@code null}
      * @throws ProductNotFoundException if no product has the supplied code
      */
     public ProductResponse findProductByProductCode(String productCode, boolean fetchInStock) {
         return productRepository
                 .findByProductCode(productCode)
-                .map(this::toResponse)
+                .map(product -> toResponse(product, fetchInStock))
                 .orElseThrow(() -> new ProductNotFoundException(productCode));
     }
 
@@ -191,7 +196,7 @@ public class ProductService implements CatalogFacade {
 
         Product updated = saveAndFlush(existing);
         log.info("Updated product: id={}, code={}", updated.getId(), updated.getProductCode());
-        return toResponse(updated);
+        return toResponse(updated, true);
     }
 
     /**
@@ -281,7 +286,18 @@ public class ProductService implements CatalogFacade {
         }
     }
 
-    private ProductResponse toResponse(Product product) {
+    private ProductResponse toResponse(Product product, boolean fetchInStock) {
+        Boolean inStock = null;
+        if (fetchInStock && inventoryFacade != null) {
+            inStock =
+                    inventoryFacade
+                            .findInventoryByProductCode(product.getProductCode())
+                            .map(
+                                    inv ->
+                                            inv.availableQuantity() != null
+                                                    && inv.availableQuantity() > 0)
+                            .orElse(false);
+        }
         return new ProductResponse(
                 product.getId(),
                 product.getProductCode(),
@@ -289,7 +305,11 @@ public class ProductService implements CatalogFacade {
                 product.getDescription(),
                 product.getImageUrl(),
                 product.getPrice(),
-                null);
+                inStock);
+    }
+
+    private ProductResponse toResponse(Product product) {
+        return toResponse(product, false);
     }
 
     private ProductDto toDto(Product product) {

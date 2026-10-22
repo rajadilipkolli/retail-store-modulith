@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="createTable-order_idempotency" author="rajakolli">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="orders" tableName="order_idempotency"/>
+            </not>
+        </preConditions>
+
+        <createTable schemaName="orders" tableName="order_idempotency">
+            <column name="id" type="BIGINT">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_order_idempotency"/>
+            </column>
+            <column name="customer_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="request_fingerprint" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="order_id" type="BIGINT"/>
+            <column name="status" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="response_payload" type="TEXT"/>
+            <column name="created_date" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_modified_date" type="TIMESTAMPTZ"/>
+        </createTable>
+
+        <addUniqueConstraint schemaName="orders" tableName="order_idempotency"
+                             columnNames="customer_id, idempotency_key"
+                             constraintName="uc_order_idempotency_customer_key"/>
+
+        <createIndex schemaName="orders" tableName="order_idempotency"
+                     indexName="idx_order_idempotency_customer_key">
+            <column name="customer_id"/>
+            <column name="idempotency_key"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

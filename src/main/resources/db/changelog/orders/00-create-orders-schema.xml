@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="createSchema-orders" author="rajakolli">
+        <sql>CREATE SCHEMA IF NOT EXISTS orders</sql>
+        <comment>Create dedicated orders schema for module isolation</comment>
+    </changeSet>
+
+    <changeSet id="enable-pg-trgm" author="rajakolli" dbms="postgresql">
+        <sql>CREATE EXTENSION IF NOT EXISTS pg_trgm</sql>
+        <comment>Enable pg_trgm extension for similarity search</comment>
+    </changeSet>
+
+</databaseChangeLog>

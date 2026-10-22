@@ -123,6 +123,33 @@ class ProductControllerTest {
     }
 
     @Test
+    @DisplayName(
+            "GET /api/v1/catalog/product-code/{productCode}?fetchInStock=true delegates to"
+                    + " service and returns stock")
+    void getProductByProductCode_WithFetchInStock() {
+        ProductResponse response =
+                new ProductResponse(
+                        1L,
+                        "P001",
+                        "Product 1",
+                        "Desc",
+                        "img.jpg",
+                        BigDecimal.valueOf(99.99),
+                        true);
+        given(productService.findProductByProductCode("P001", true)).willReturn(response);
+
+        assertThat(
+                        mockMvcTester
+                                .get()
+                                .uri("/api/v1/catalog/product-code/P001")
+                                .param("fetchInStock", "true"))
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.inStock")
+                .isEqualTo(true);
+    }
+
+    @Test
     @DisplayName("GET /api/v1/catalog/exists returns boolean response")
     void productExists() {
         given(productService.productExistsByProductCodes(List.of("P001", "P002"))).willReturn(true);

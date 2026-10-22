@@ -20,6 +20,11 @@
     <include file="db/changelog/payment/02-create-payment-operations-table.xml"/>
     <include file="db/changelog/payment/03-insert-sample-customers.xml"/>
 
+    <include file="db/changelog/orders/00-create-orders-schema.xml"/>
+    <include file="db/changelog/orders/01-create-orders-tables.xml"/>
+    <include file="db/changelog/orders/02-create-order-idempotency-table.xml"/>
+    <include file="db/changelog/orders/03-insert-sample-orders.xml"/>
+
     <include file="db/changelog/shared/01-create-event-publication.sql"/>
     <include file="db/changelog/shared/02-create-event-publication-archive.sql"/>
 
