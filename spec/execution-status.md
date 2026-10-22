@@ -26,7 +26,7 @@ Phase	Specification	Status	Evidence / PR	Approval
 1. Modulith foundation	01-modulith-foundation.md	COMPLETE	Recorded below	Approved
 2. Catalog module	02-catalog-module.md	COMPLETE	Recorded below	User Approved
 3. Inventory module	03-inventory-module.md	COMPLETE	Recorded below	User Approved (#10)
-4. Payments module	04-payments-module.md	COMPLETE	Recorded below	Pending reviewer review
+4. Payments module	04-payments-module.md	IN_PROGRESS	Recorded below	Pending reviewer review
 5. Orders orchestration	05-orders-orchestration.md	NOT_STARTED	TBD	Pending
 6. API and deployment	06-api-and-deployment.md	NOT_STARTED	TBD	Pending
 7. Migration verification	07-migration-verification.md	NOT_STARTED	TBD	Pending
@@ -137,10 +137,10 @@ Phase 1 is COMPLETE. Foundation, packaging, module boundaries, shared and UI mod
 
 Phase 4: Payments Module
 Specification: spec/04-payments-module.md
-Status: COMPLETE
+Status: IN_PROGRESS
 Started: 2026-10-22
-Completed: 2026-10-22
-Implementation PR / commit: Local branch main
+Completed: TBD
+Implementation PR / commit: Branch `payment-service`
 Reviewer / approver: Pending reviewer review
 
 Acceptance criteria evidence
@@ -149,7 +149,7 @@ Criterion	Status	Evidence	Notes
 Payment and customer account behavior is migrated	PASS	com.example.retail.payments with isolated domain, application, persistence, and web packages	Spring MVC, pure synchronous controllers & services
 Payments owns its persistence	PASS	PostgreSQL isolated payment schema (payment.customers & payment.payment_operations)	All entities use @Tsid(TsidSupplier.class)
 A documented public module API exists	PASS	com.example.retail.payments.PaymentsFacade and DTOs in com.example.retail.shared.payments	PaymentsFacadeImpl delegates cleanly
-The canonical money policy is verified against existing behavior or explicitly approved before migration, and every policy rule has passing tests	PASS	ADR-0006 approved; scale 2, RoundingMode.HALF_UP, USD only; check constraints & service validations verified	Passing unit & integration tests
+The canonical money policy is verified against existing behavior or explicitly approved before migration, and every policy rule has passing tests	NOT VERIFIED	ADR-0006 is Proposed; approval date is Pending	Canonical policy acceptance and complete policy verification remain pending
 Monetary calculations use appropriate precise representations	PASS	BigDecimal and NUMERIC(19,2) with non-negative constraints	Verified in PaymentPersistenceIT & PaymentServiceTest
 Payment coexistence and rollback enforce one write owner for migrated operations	PASS	Payments module is single write owner for migrated data; pessimistic write locking prevents overdrafts	Verified via PaymentConcurrencyIT
 Financial state transitions are validated	PASS	State machine (RESERVED -> CONFIRMED / RELEASED / REFUNDED / FAILED)	Invalid transitions rejected with 400 Bad Request
@@ -171,11 +171,12 @@ python tools/verify-specs.py	PASS	Checks executed: 187; Errors: 0; Warnings: 0; 
 
 Outstanding issues
 
-None recorded.
+- ADR-0006 acceptance and canonical money policy verification remain pending.
+- Required reviewer approval is pending.
 
 Decision
 
-Phase 4 is COMPLETE. All mandatory acceptance criteria and exit criteria verified with passing unit tests, Testcontainers integration tests, architecture tests, and full Maven build lifecycle.
+Phase 4 remains IN_PROGRESS until ADR-0006 is accepted, the canonical money policy criterion is verified, and required reviewer approval is recorded.
 
 ### Phase 3 Evidence Record
 
@@ -185,7 +186,7 @@ Status: COMPLETE
 Started: 2026-10-22
 Completed: 2026-10-22
 Implementation PR / commit: Local branch spec
-Reviewer / approver: Pending user review
+Reviewer / approver: User Approved (#10)
 
 Acceptance criteria evidence
 

@@ -7,8 +7,10 @@ package com.example.retail.payments.internal.application;
 
 import com.example.retail.payments.internal.domain.CurrencyMismatchException;
 import com.example.retail.payments.internal.domain.Customer;
+import com.example.retail.payments.internal.domain.CustomerNotFoundException;
 import com.example.retail.payments.internal.domain.InvalidPaymentTransitionException;
 import com.example.retail.payments.internal.domain.PaymentIdempotencyConflictException;
+import com.example.retail.payments.internal.domain.PaymentNotFoundException;
 import com.example.retail.payments.internal.domain.PaymentOperation;
 import com.example.retail.payments.internal.persistence.CustomerRepository;
 import com.example.retail.payments.internal.persistence.PaymentOperationRepository;
@@ -63,17 +65,14 @@ public class PaymentService {
                 operationRepository.findByIdempotencyKey(request.idempotencyKey());
         if (existingOpt.isPresent()) {
             PaymentOperation existing = existingOpt.get();
-            if (!Objects.equals(existing.getOrderId(), request.orderId())
-                    || !Objects.equals(existing.getCustomerId(), request.customerId())
-                    || existing.getAmount().compareTo(normalizedAmount) != 0
-                    || !existing.getCurrency()
-                            .equalsIgnoreCase(
-                                    request.currency() != null
-                                            ? request.currency()
-                                            : SUPPORTED_CURRENCY)) {
-                LOGGER.error("Idempotency conflict for payment key: {}", request.idempotencyKey());
-                throw PaymentIdempotencyConflictException.forKey(request.idempotencyKey());
-            }
+            validateIdempotencyParameters(
+                    existing,
+                    request.idempotencyKey(),
+                    "RESERVE",
+                    request.orderId(),
+                    request.customerId(),
+                    normalizedAmount,
+                    request.currency());
             LOGGER.info(
                     "Returning idempotent existing payment result for key: {}, status: {}",
                     request.idempotencyKey(),
@@ -88,32 +87,21 @@ public class PaymentService {
                     "Payment reservation failed: customer {} not found for order {}",
                     request.customerId(),
                     request.orderId());
-            return recordAndPublishOperation(
-                    request.idempotencyKey(),
-                    request.orderId(),
-                    request.customerId(),
-                    "RESERVE",
-                    normalizedAmount,
-                    SUPPORTED_CURRENCY,
-                    PaymentStatus.FAILED,
-                    "Customer not found");
+            throw new CustomerNotFoundException(request.customerId());
         }
 
         // A concurrent retry may have committed while waiting for customer lock.
         existingOpt = operationRepository.findByIdempotencyKey(request.idempotencyKey());
         if (existingOpt.isPresent()) {
             PaymentOperation existing = existingOpt.get();
-            if (!Objects.equals(existing.getOrderId(), request.orderId())
-                    || !Objects.equals(existing.getCustomerId(), request.customerId())
-                    || existing.getAmount().compareTo(normalizedAmount) != 0
-                    || !existing.getCurrency()
-                            .equalsIgnoreCase(
-                                    request.currency() != null
-                                            ? request.currency()
-                                            : SUPPORTED_CURRENCY)) {
-                LOGGER.error("Idempotency conflict for payment key: {}", request.idempotencyKey());
-                throw PaymentIdempotencyConflictException.forKey(request.idempotencyKey());
-            }
+            validateIdempotencyParameters(
+                    existing,
+                    request.idempotencyKey(),
+                    "RESERVE",
+                    request.orderId(),
+                    request.customerId(),
+                    normalizedAmount,
+                    request.currency());
             LOGGER.info(
                     "Returning idempotent existing payment result for key: {}, status: {}",
                     request.idempotencyKey(),
@@ -163,11 +151,7 @@ public class PaymentService {
         PaymentOperation operation =
                 operationRepository
                         .findByIdempotencyKey(idempotencyKey)
-                        .orElseThrow(
-                                () ->
-                                        new IllegalArgumentException(
-                                                "Payment with key '%s' not found"
-                                                        .formatted(idempotencyKey)));
+                        .orElseThrow(() -> new PaymentNotFoundException(idempotencyKey));
 
         if (operation.getStatus() == PaymentStatus.CONFIRMED) {
             LOGGER.info("Payment {} already confirmed (idempotent)", idempotencyKey);
@@ -179,7 +163,10 @@ public class PaymentService {
         }
 
         Customer customer =
-                customerRepository.findWithLockById(operation.getCustomerId()).orElseThrow();
+                customerRepository
+                        .findWithLockById(operation.getCustomerId())
+                        .orElseThrow(
+                                () -> new CustomerNotFoundException(operation.getCustomerId()));
 
         customer.setAmountReserved(
                 customer.getAmountReserved().subtract(operation.getAmount()).max(BigDecimal.ZERO));
@@ -200,11 +187,7 @@ public class PaymentService {
         PaymentOperation operation =
                 operationRepository
                         .findByIdempotencyKey(idempotencyKey)
-                        .orElseThrow(
-                                () ->
-                                        new IllegalArgumentException(
-                                                "Payment with key '%s' not found"
-                                                        .formatted(idempotencyKey)));
+                        .orElseThrow(() -> new PaymentNotFoundException(idempotencyKey));
 
         if (operation.getStatus() == PaymentStatus.RELEASED) {
             LOGGER.info("Payment {} already released (idempotent)", idempotencyKey);
@@ -216,7 +199,10 @@ public class PaymentService {
         }
 
         Customer customer =
-                customerRepository.findWithLockById(operation.getCustomerId()).orElseThrow();
+                customerRepository
+                        .findWithLockById(operation.getCustomerId())
+                        .orElseThrow(
+                                () -> new CustomerNotFoundException(operation.getCustomerId()));
 
         customer.setAmountReserved(
                 customer.getAmountReserved().subtract(operation.getAmount()).max(BigDecimal.ZERO));
@@ -246,22 +232,67 @@ public class PaymentService {
                 operationRepository.findByIdempotencyKey(request.idempotencyKey());
         if (existingOpt.isPresent()) {
             PaymentOperation existing = existingOpt.get();
+            validateIdempotencyParameters(
+                    existing,
+                    request.idempotencyKey(),
+                    "REFUND",
+                    request.orderId(),
+                    request.customerId(),
+                    normalizedAmount,
+                    request.currency());
             return mapToPaymentResult(existing);
         }
 
         Customer customer =
                 customerRepository
                         .findWithLockById(request.customerId())
-                        .orElseThrow(
-                                () ->
-                                        new IllegalArgumentException(
-                                                "Customer '%d' not found"
-                                                        .formatted(request.customerId())));
+                        .orElseThrow(() -> new CustomerNotFoundException(request.customerId()));
 
         // A concurrent refund retry may have committed while waiting for lock
         existingOpt = operationRepository.findByIdempotencyKey(request.idempotencyKey());
         if (existingOpt.isPresent()) {
-            return mapToPaymentResult(existingOpt.get());
+            PaymentOperation existing = existingOpt.get();
+            validateIdempotencyParameters(
+                    existing,
+                    request.idempotencyKey(),
+                    "REFUND",
+                    request.orderId(),
+                    request.customerId(),
+                    normalizedAmount,
+                    request.currency());
+            return mapToPaymentResult(existing);
+        }
+
+        // The customer lock serializes refunds against the captured amount for this account.
+        var operations =
+                operationRepository.findByOrderId(request.orderId()).stream()
+                        .filter(op -> Objects.equals(op.getCustomerId(), request.customerId()))
+                        .toList();
+        var captures =
+                operations.stream()
+                        .filter(op -> op.getStatus() == PaymentStatus.CONFIRMED)
+                        .toList();
+        if (captures.isEmpty()) {
+            throw new InvalidPaymentTransitionException(
+                    "Refund requires a confirmed payment for the same order and customer");
+        }
+        for (PaymentOperation capture : captures) {
+            if (!request.currency().equalsIgnoreCase(capture.getCurrency())) {
+                throw new CurrencyMismatchException(capture.getCurrency());
+            }
+        }
+        BigDecimal capturedAmount =
+                captures.stream()
+                        .map(PaymentOperation::getAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal refundedAmount =
+                operations.stream()
+                        .filter(op -> op.getStatus() == PaymentStatus.REFUNDED)
+                        .map(PaymentOperation::getAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (refundedAmount.add(normalizedAmount).compareTo(capturedAmount) > 0) {
+            throw new InvalidPaymentTransitionException(
+                    "Total refunds cannot exceed the captured amount");
         }
 
         customer.setAmountAvailable(customer.getAmountAvailable().add(normalizedAmount));
@@ -341,10 +372,28 @@ public class PaymentService {
                 op.getMessage());
     }
 
+    private void validateIdempotencyParameters(
+            PaymentOperation existing,
+            String idempotencyKey,
+            String operationType,
+            Long orderId,
+            Long customerId,
+            BigDecimal amount,
+            String currency) {
+        if (!Objects.equals(existing.getOperationType(), operationType)
+                || !Objects.equals(existing.getOrderId(), orderId)
+                || !Objects.equals(existing.getCustomerId(), customerId)
+                || existing.getAmount().compareTo(amount) != 0
+                || !currency.equalsIgnoreCase(existing.getCurrency())) {
+            LOGGER.error("Idempotency conflict for payment key: {}", idempotencyKey);
+            throw PaymentIdempotencyConflictException.forKey(idempotencyKey);
+        }
+    }
+
     private void validateCurrency(String currency) {
-        if (currency != null
-                && !currency.trim().isEmpty()
-                && !currency.equalsIgnoreCase(SUPPORTED_CURRENCY)) {
+        if (currency == null
+                || currency.isBlank()
+                || !currency.equalsIgnoreCase(SUPPORTED_CURRENCY)) {
             throw new CurrencyMismatchException(currency);
         }
     }

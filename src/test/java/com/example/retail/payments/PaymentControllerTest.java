@@ -11,8 +11,10 @@ import static org.mockito.BDDMockito.given;
 
 import com.example.retail.payments.internal.application.PaymentService;
 import com.example.retail.payments.internal.domain.CurrencyMismatchException;
+import com.example.retail.payments.internal.domain.CustomerNotFoundException;
 import com.example.retail.payments.internal.domain.InvalidPaymentTransitionException;
 import com.example.retail.payments.internal.domain.PaymentIdempotencyConflictException;
+import com.example.retail.payments.internal.domain.PaymentNotFoundException;
 import com.example.retail.payments.internal.web.PaymentController;
 import com.example.retail.payments.internal.web.PaymentExceptionHandler;
 import com.example.retail.shared.payments.PaymentRefundRequest;
@@ -23,6 +25,8 @@ import java.math.BigDecimal;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -238,5 +242,56 @@ class PaymentControllerTest {
 
         assertThat(mockMvcTester.get().uri("/api/v1/payments/key-missing"))
                 .hasStatus(HttpStatus.NOT_FOUND);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"confirm", "release"})
+    void missingPaymentReturns404(String action) {
+        if (action.equals("confirm")) {
+            given(paymentService.confirm("missing"))
+                    .willThrow(new PaymentNotFoundException("missing"));
+        } else {
+            given(paymentService.release("missing"))
+                    .willThrow(new PaymentNotFoundException("missing"));
+        }
+        assertThat(mockMvcTester.post().uri("/api/v1/payments/" + action + "/missing"))
+                .hasStatus(HttpStatus.NOT_FOUND)
+                .bodyJson()
+                .extractingPath("$.type")
+                .isEqualTo("https://api.retail.com/errors/payment-not-found");
+        assertThat(mockMvcTester.post().uri("/api/v1/payments/missing/" + action))
+                .hasStatus(HttpStatus.NOT_FOUND);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"reserve", "refund", "confirm", "release"})
+    void missingCustomerReturns404(String action) {
+        String json =
+                """
+                {"idempotencyKey":"key", "orderId":100, "customerId":999, "amount":10.00, "currency":"USD"}
+                """;
+        if (action.equals("reserve")) {
+            given(paymentService.reserve(any())).willThrow(new CustomerNotFoundException(999L));
+        } else if (action.equals("refund")) {
+            given(paymentService.refund(any())).willThrow(new CustomerNotFoundException(999L));
+        } else if (action.equals("confirm")) {
+            given(paymentService.confirm("key")).willThrow(new CustomerNotFoundException(999L));
+        } else {
+            given(paymentService.release("key")).willThrow(new CustomerNotFoundException(999L));
+        }
+        String uri =
+                "/api/v1/payments/"
+                        + action
+                        + (action.equals("confirm") || action.equals("release") ? "/key" : "");
+        assertThat(
+                        mockMvcTester
+                                .post()
+                                .uri(uri)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(json))
+                .hasStatus(HttpStatus.NOT_FOUND)
+                .bodyJson()
+                .extractingPath("$.type")
+                .isEqualTo("https://api.retail.com/errors/customer-not-found");
     }
 }

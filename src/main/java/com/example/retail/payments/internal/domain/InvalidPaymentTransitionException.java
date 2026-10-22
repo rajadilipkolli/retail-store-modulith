@@ -15,6 +15,10 @@ public class InvalidPaymentTransitionException extends RuntimeException {
                         .formatted(targetAction, current));
     }
 
+    public InvalidPaymentTransitionException(String message) {
+        super(message);
+    }
+
     public static InvalidPaymentTransitionException forTransition(
             PaymentStatus current, String targetAction) {
         return new InvalidPaymentTransitionException(current, targetAction);

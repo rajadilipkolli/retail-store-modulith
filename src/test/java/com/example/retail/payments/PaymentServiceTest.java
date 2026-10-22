@@ -11,12 +11,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.example.retail.payments.internal.application.PaymentService;
 import com.example.retail.payments.internal.domain.CurrencyMismatchException;
 import com.example.retail.payments.internal.domain.Customer;
+import com.example.retail.payments.internal.domain.CustomerNotFoundException;
 import com.example.retail.payments.internal.domain.InvalidPaymentTransitionException;
 import com.example.retail.payments.internal.domain.PaymentIdempotencyConflictException;
+import com.example.retail.payments.internal.domain.PaymentNotFoundException;
 import com.example.retail.payments.internal.domain.PaymentOperation;
 import com.example.retail.payments.internal.persistence.CustomerRepository;
 import com.example.retail.payments.internal.persistence.PaymentOperationRepository;
@@ -27,11 +30,17 @@ import com.example.retail.shared.payments.PaymentResult;
 import com.example.retail.shared.payments.PaymentStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -196,21 +205,18 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("Returns FAILED when customer is not found")
+    @DisplayName("Missing reservation customer throws without recording an operation")
     void reserveCustomerNotFound() {
         PaymentReservationRequest req =
                 new PaymentReservationRequest(
-                        "key-missing", 200L, 99L, BigDecimal.valueOf(50.00), "USD");
-
-        given(operationRepository.findByIdempotencyKey("key-missing")).willReturn(Optional.empty());
+                        "key-missing", 200L, 99L, new BigDecimal("50.00"), "USD");
         given(customerRepository.findWithLockById(99L)).willReturn(Optional.empty());
-        given(operationRepository.save(any(PaymentOperation.class)))
-                .willAnswer(inv -> inv.getArgument(0));
 
-        PaymentResult result = paymentService.reserve(req);
-
-        assertThat(result.status()).isEqualTo(PaymentStatus.FAILED);
-        assertThat(result.message()).contains("Customer not found");
+        assertThatThrownBy(() -> paymentService.reserve(req))
+                .isInstanceOf(CustomerNotFoundException.class)
+                .hasMessageContaining("99");
+        verify(operationRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -344,12 +350,13 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("Confirm throws IllegalArgumentException if payment missing")
+    @DisplayName("Confirm throws not found if payment missing")
     void confirmMissingThrows() {
         given(operationRepository.findByIdempotencyKey("key-missing")).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> paymentService.confirm("key-missing"))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(PaymentNotFoundException.class)
+                .hasMessageContaining("key-missing");
     }
 
     @Test
@@ -437,6 +444,18 @@ class PaymentServiceTest {
 
         given(operationRepository.findByIdempotencyKey("key-refund")).willReturn(Optional.empty());
         given(customerRepository.findWithLockById(10L)).willReturn(Optional.of(customer));
+        given(operationRepository.findByOrderId(500L))
+                .willReturn(
+                        List.of(
+                                createOperation(
+                                        2L,
+                                        "capture",
+                                        500L,
+                                        10L,
+                                        "RESERVE",
+                                        new BigDecimal("50.00"),
+                                        "USD",
+                                        PaymentStatus.CONFIRMED)));
         given(operationRepository.save(any(PaymentOperation.class)))
                 .willAnswer(inv -> inv.getArgument(0));
 
@@ -475,7 +494,7 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("Refund throws IllegalArgumentException if customer missing")
+    @DisplayName("Refund throws customer not found if customer missing")
     void refundMissingCustomerThrows() {
         PaymentRefundRequest req =
                 new PaymentRefundRequest(
@@ -485,8 +504,8 @@ class PaymentServiceTest {
         given(customerRepository.findWithLockById(999L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> paymentService.refund(req))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("not found");
+                .isInstanceOf(CustomerNotFoundException.class)
+                .hasMessageContaining("999");
     }
 
     @Test
@@ -520,5 +539,280 @@ class PaymentServiceTest {
         Optional<PaymentResult> result = paymentService.getPaymentStatus("key-missing");
 
         assertThat(result).isEmpty();
+    }
+
+    static Stream<Arguments> missingCurrencies() {
+        return Stream.of((String) null, "", " ", "\t")
+                .flatMap(
+                        currency ->
+                                Stream.of(
+                                        Arguments.of(false, currency),
+                                        Arguments.of(true, currency)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("missingCurrencies")
+    void missingCurrencyRejectedBeforeRepositoryAccess(boolean refund, String currency) {
+        assertThatThrownBy(
+                        () -> {
+                            if (refund) {
+                                paymentService.refund(
+                                        new PaymentRefundRequest(
+                                                "key", 500L, 10L, BigDecimal.TEN, currency, null));
+                            } else {
+                                paymentService.reserve(
+                                        new PaymentReservationRequest(
+                                                "key", 500L, 10L, BigDecimal.TEN, currency));
+                            }
+                        })
+                .isInstanceOf(CurrencyMismatchException.class);
+        verifyNoInteractions(customerRepository, operationRepository, eventPublisher);
+    }
+
+    static Stream<Arguments> idempotencyMismatches() {
+        return Stream.of(false, true)
+                .flatMap(
+                        refund ->
+                                Stream.of(false, true)
+                                        .flatMap(
+                                                afterLock ->
+                                                        Stream.of(
+                                                                        "type",
+                                                                        "order",
+                                                                        "customer",
+                                                                        "amount",
+                                                                        "currency")
+                                                                .map(
+                                                                        field ->
+                                                                                Arguments.of(
+                                                                                        refund,
+                                                                                        afterLock,
+                                                                                        field))));
+    }
+
+    @ParameterizedTest
+    @MethodSource("idempotencyMismatches")
+    void rejectsMismatchedIdempotencyParameters(boolean refund, boolean afterLock, String field) {
+        PaymentOperation existing =
+                createOperation(
+                        1L,
+                        "key",
+                        500L,
+                        10L,
+                        refund ? "REFUND" : "RESERVE",
+                        new BigDecimal("10.00"),
+                        "USD",
+                        refund ? PaymentStatus.REFUNDED : PaymentStatus.RESERVED);
+        switch (field) {
+            case "type" -> existing.setOperationType(refund ? "RESERVE" : "REFUND");
+            case "order" -> existing.setOrderId(501L);
+            case "customer" -> existing.setCustomerId(11L);
+            case "amount" -> existing.setAmount(new BigDecimal("10.01"));
+            case "currency" -> existing.setCurrency("EUR");
+        }
+        Customer customer = createCustomer(10L, new BigDecimal("50.00"), BigDecimal.ZERO);
+        if (afterLock) {
+            given(operationRepository.findByIdempotencyKey("key"))
+                    .willReturn(Optional.empty(), Optional.of(existing));
+            given(customerRepository.findWithLockById(10L)).willReturn(Optional.of(customer));
+        } else {
+            given(operationRepository.findByIdempotencyKey("key"))
+                    .willReturn(Optional.of(existing));
+        }
+        assertThatThrownBy(
+                        () -> {
+                            if (refund) {
+                                paymentService.refund(
+                                        new PaymentRefundRequest(
+                                                "key", 500L, 10L, BigDecimal.TEN, "USD", null));
+                            } else {
+                                paymentService.reserve(
+                                        new PaymentReservationRequest(
+                                                "key", 500L, 10L, BigDecimal.TEN, "USD"));
+                            }
+                        })
+                .isInstanceOf(PaymentIdempotencyConflictException.class)
+                .hasMessageContaining("key");
+        assertThat(customer.getAmountAvailable()).isEqualByComparingTo("50.00");
+        verify(customerRepository, never()).save(any());
+        verify(operationRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void missingCustomerForConfirmOrRelease(boolean confirm) {
+        PaymentOperation existing =
+                createOperation(
+                        1L,
+                        "key",
+                        500L,
+                        10L,
+                        "RESERVE",
+                        BigDecimal.TEN,
+                        "USD",
+                        PaymentStatus.RESERVED);
+        given(operationRepository.findByIdempotencyKey("key")).willReturn(Optional.of(existing));
+        assertThatThrownBy(
+                        () -> {
+                            if (confirm) paymentService.confirm("key");
+                            else paymentService.release("key");
+                        })
+                .isInstanceOf(CustomerNotFoundException.class)
+                .hasMessageContaining("10");
+        verify(operationRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void releaseMissingPaymentThrows() {
+        assertThatThrownBy(() -> paymentService.release("missing"))
+                .isInstanceOf(PaymentNotFoundException.class)
+                .hasMessageContaining("missing");
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "missing",
+                "reserved",
+                "released",
+                "failed",
+                "otherCustomer",
+                "overLimit",
+                "wrongCurrency"
+            })
+    void refundRejectsInvalidCaptureOrExcessTotalWithoutMutation(String scenario) {
+        Customer customer = createCustomer(10L, new BigDecimal("50.00"), BigDecimal.ZERO);
+        given(customerRepository.findWithLockById(10L)).willReturn(Optional.of(customer));
+        PaymentStatus status =
+                switch (scenario) {
+                    case "reserved" -> PaymentStatus.RESERVED;
+                    case "released" -> PaymentStatus.RELEASED;
+                    case "failed" -> PaymentStatus.FAILED;
+                    default -> PaymentStatus.CONFIRMED;
+                };
+        PaymentOperation capture =
+                createOperation(
+                        1L,
+                        "capture",
+                        500L,
+                        scenario.equals("otherCustomer") ? 11L : 10L,
+                        "RESERVE",
+                        new BigDecimal("50.00"),
+                        scenario.equals("wrongCurrency") ? "EUR" : "USD",
+                        status);
+        PaymentOperation priorRefund =
+                createOperation(
+                        2L,
+                        "priorRefund",
+                        500L,
+                        10L,
+                        "REFUND",
+                        new BigDecimal("40.00"),
+                        "USD",
+                        PaymentStatus.REFUNDED);
+        given(operationRepository.findByOrderId(500L))
+                .willReturn(scenario.equals("missing") ? List.of() : List.of(capture, priorRefund));
+        assertThatThrownBy(
+                        () ->
+                                paymentService.refund(
+                                        new PaymentRefundRequest(
+                                                "key",
+                                                500L,
+                                                10L,
+                                                new BigDecimal("10.005"),
+                                                "USD",
+                                                null)))
+                .isInstanceOf(
+                        scenario.equals("wrongCurrency")
+                                ? CurrencyMismatchException.class
+                                : InvalidPaymentTransitionException.class);
+        assertThat(customer.getAmountAvailable()).isEqualByComparingTo("50.00");
+        verify(customerRepository, never()).save(any());
+        verify(operationRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void partialRefundAtCaptureLimitUsesNormalizedAmountAndIgnoresOtherCustomers() {
+        Customer customer = createCustomer(10L, new BigDecimal("50.00"), BigDecimal.ZERO);
+        given(customerRepository.findWithLockById(10L)).willReturn(Optional.of(customer));
+        given(operationRepository.findByOrderId(500L))
+                .willReturn(
+                        List.of(
+                                createOperation(
+                                        1L,
+                                        "capture",
+                                        500L,
+                                        10L,
+                                        "RESERVE",
+                                        new BigDecimal("50.00"),
+                                        "USD",
+                                        PaymentStatus.CONFIRMED),
+                                createOperation(
+                                        2L,
+                                        "prior",
+                                        500L,
+                                        10L,
+                                        "REFUND",
+                                        new BigDecimal("40.00"),
+                                        "USD",
+                                        PaymentStatus.REFUNDED),
+                                createOperation(
+                                        3L,
+                                        "other",
+                                        500L,
+                                        11L,
+                                        "REFUND",
+                                        new BigDecimal("50.00"),
+                                        "USD",
+                                        PaymentStatus.REFUNDED)));
+        given(operationRepository.save(any(PaymentOperation.class)))
+                .willAnswer(inv -> inv.getArgument(0));
+        PaymentResult result =
+                paymentService.refund(
+                        new PaymentRefundRequest(
+                                "key", 500L, 10L, new BigDecimal("9.995"), "usd", null));
+        assertThat(result.amount()).isEqualByComparingTo("10.00");
+        assertThat(customer.getAmountAvailable()).isEqualByComparingTo("60.00");
+        var ordered = org.mockito.Mockito.inOrder(customerRepository, operationRepository);
+        ordered.verify(operationRepository).findByIdempotencyKey("key");
+        ordered.verify(customerRepository).findWithLockById(10L);
+        ordered.verify(operationRepository).findByIdempotencyKey("key");
+        ordered.verify(operationRepository).findByOrderId(500L);
+        ordered.verify(customerRepository).save(customer);
+    }
+
+    @Test
+    void refundMatchingRetryAfterLockDoesNotCreditAgain() {
+        Customer customer = createCustomer(10L, new BigDecimal("50.00"), BigDecimal.ZERO);
+        PaymentOperation existing =
+                createOperation(
+                        1L,
+                        "key",
+                        500L,
+                        10L,
+                        "REFUND",
+                        new BigDecimal("10.00"),
+                        "USD",
+                        PaymentStatus.REFUNDED);
+        given(operationRepository.findByIdempotencyKey("key"))
+                .willReturn(Optional.empty(), Optional.of(existing));
+        given(customerRepository.findWithLockById(10L)).willReturn(Optional.of(customer));
+        PaymentResult result =
+                paymentService.refund(
+                        new PaymentRefundRequest(
+                                "key",
+                                500L,
+                                10L,
+                                new BigDecimal("9.995"),
+                                "usd",
+                                "different reason"));
+        assertThat(result.status()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(customer.getAmountAvailable()).isEqualByComparingTo("50.00");
+        verify(customerRepository, never()).save(any());
+        verify(operationRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
     }
 }

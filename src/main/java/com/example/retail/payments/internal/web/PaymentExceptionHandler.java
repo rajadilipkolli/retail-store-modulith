@@ -11,6 +11,7 @@ import com.example.retail.payments.internal.domain.CustomerNotFoundException;
 import com.example.retail.payments.internal.domain.InsufficientBalanceException;
 import com.example.retail.payments.internal.domain.InvalidPaymentTransitionException;
 import com.example.retail.payments.internal.domain.PaymentIdempotencyConflictException;
+import com.example.retail.payments.internal.domain.PaymentNotFoundException;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Comparator;
@@ -30,6 +31,16 @@ public class PaymentExceptionHandler {
                 ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setTitle("Customer Not Found");
         problem.setType(URI.create("https://api.retail.com/errors/customer-not-found"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(PaymentNotFoundException.class)
+    public ProblemDetail handlePaymentNotFound(PaymentNotFoundException ex) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Payment Not Found");
+        problem.setType(URI.create("https://api.retail.com/errors/payment-not-found"));
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }

@@ -91,9 +91,10 @@ class PaymentPersistenceIT {
                         () ->
                                 jdbcClient
                                         .sql(
-                                                "INSERT INTO payment.customers (id, name, email, amount_available, amount_reserved, version) VALUES (999991, 'Bad', 'bad1@test.com', -10.00, 0.00, 0)")
+                                                "INSERT INTO payment.customers (id, name, email, phone, address_line1, city, state, zip_code, country, amount_available, amount_reserved, version) VALUES (999991, 'Bad', 'bad1@test.com', '1234567890', '123 St', 'City', 'State', '12345', 'USA', -10.00, 0.00, 0)")
                                         .update())
-                .isInstanceOf(DataIntegrityViolationException.class);
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasStackTraceContaining("chk_customers_amount_available");
     }
 
     @Test
@@ -103,9 +104,10 @@ class PaymentPersistenceIT {
                         () ->
                                 jdbcClient
                                         .sql(
-                                                "INSERT INTO payment.customers (id, name, email, amount_available, amount_reserved, version) VALUES (999992, 'Bad', 'bad2@test.com', 10.00, -5.00, 0)")
+                                                "INSERT INTO payment.customers (id, name, email, phone, address_line1, city, state, zip_code, country, amount_available, amount_reserved, version) VALUES (999992, 'Bad', 'bad2@test.com', '1234567890', '123 St', 'City', 'State', '12345', 'USA', 10.00, -5.00, 0)")
                                         .update())
-                .isInstanceOf(DataIntegrityViolationException.class);
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasStackTraceContaining("chk_customers_amount_reserved");
     }
 
     @Test
