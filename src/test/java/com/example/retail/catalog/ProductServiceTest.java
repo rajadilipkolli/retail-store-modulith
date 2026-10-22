@@ -194,8 +194,6 @@ class ProductServiceTest {
                         BigDecimal.valueOf(15.0),
                         "new.jpg");
         given(productRepository.saveAndFlush(existing)).willReturn(updatedEntity);
-        given(inventoryFacade.findInventoryByProductCode("P001"))
-                .willReturn(Optional.of(new InventoryResponse(1L, "P001", 5, 0)));
 
         ProductRequest request =
                 new ProductRequest(
@@ -206,9 +204,10 @@ class ProductServiceTest {
                         BigDecimal.valueOf(15.0));
         ProductResponse response = productService.updateProduct(1L, request);
 
-        assertThat(response.inStock()).isTrue();
+        assertThat(response.inStock()).isNull();
         assertThat(response.productName()).isEqualTo("Updated Name");
         assertThat(response.price()).isEqualTo(BigDecimal.valueOf(15.0));
+        verify(inventoryFacade, never()).findInventoryByProductCode(any());
     }
 
     @Test

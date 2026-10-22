@@ -196,7 +196,7 @@ public class ProductService implements CatalogFacade {
 
         Product updated = saveAndFlush(existing);
         log.info("Updated product: id={}, code={}", updated.getId(), updated.getProductCode());
-        return toResponse(updated, true);
+        return toResponse(updated);
     }
 
     /**

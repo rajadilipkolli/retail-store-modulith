@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="createTable-order_generation" author="rajakolli">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="orders" tableName="order_generation"/>
+            </not>
+        </preConditions>
+
+        <createTable schemaName="orders" tableName="order_generation">
+            <column name="idempotency_key" type="VARCHAR(255)">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_order_generation"/>
+            </column>
+            <column name="batch_size" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_batches" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="completed_batches" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="error_message" type="VARCHAR(1000)"/>
+            <column name="created_date" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_modified_date" type="TIMESTAMPTZ"/>
+        </createTable>
+    </changeSet>
+
+</databaseChangeLog>

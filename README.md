@@ -118,7 +118,7 @@ graph TD
     Orders --> Payments
     Orders --> Shared
 
-    Catalog --> Inventory
+    Catalog -->|stock availability: InventoryFacade| Inventory
     Catalog --> Shared
     Inventory --> Shared
     Payments --> Shared
@@ -127,7 +127,7 @@ graph TD
 1. **Intended Dependency Direction:**
    - **`orders`** may depend on the public APIs of **`catalog`**, **`inventory`**, and **`payments`**.
    - **`catalog`**, **`inventory`**, and **`payments`** **MUST NOT** depend on `orders`, including its public APIs or internal packages.
-   - **`catalog`** and **`inventory`** maintain strict independence (except explicitly permitted read-only catalog lookups where specified).
+   - **`catalog`** and **`inventory`** maintain strict independence, except that **`catalog`** may call the **`inventory`** public API ([`InventoryFacade.findInventoryByProductCode`](src/main/java/com/example/retail/inventory/InventoryFacade.java)) for read-only stock availability checks (`inStock` resolution); **`inventory`** must never depend on **`catalog`**.
    - **`shared`** is an open contract module and must never depend on any business module.
 2. **Encapsulation & Public APIs:**
    - Only classes in the module's root package (or explicitly documented public API packages) are accessible externally.
