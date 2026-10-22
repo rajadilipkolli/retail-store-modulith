@@ -19,6 +19,7 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     Optional<Customer> findByEmail(String email);
 
+    /** Finds a customer under a pessimistic write lock for balance changes, or empty if absent. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT c FROM Customer c WHERE c.id = :id")
     Optional<Customer> findWithLockById(@Param("id") Long id);

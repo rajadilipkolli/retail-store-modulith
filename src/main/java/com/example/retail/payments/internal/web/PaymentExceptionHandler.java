@@ -95,6 +95,9 @@ public class PaymentExceptionHandler {
         return problem;
     }
 
+    /**
+     * Returns a 400 problem response with field violations sorted by field name and a timestamp.
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidationException(MethodArgumentNotValidException ex) {
         ProblemDetail problemDetail =

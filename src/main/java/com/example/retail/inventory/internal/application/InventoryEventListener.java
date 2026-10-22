@@ -22,6 +22,9 @@ public class InventoryEventListener {
         this.inventoryService = inventoryService;
     }
 
+    /**
+     * Initializes zero inventory for the created product, preserving an existing inventory record.
+     */
     @ApplicationModuleListener
     public void onProductCreated(ProductCreatedEvent event) {
         LOGGER.info(

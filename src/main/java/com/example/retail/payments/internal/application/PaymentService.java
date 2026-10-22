@@ -51,6 +51,23 @@ public class PaymentService {
         this.eventPublisher = eventPublisher;
     }
 
+    /**
+     * Moves the rounded USD amount from available to reserved funds, records the outcome, and
+     * publishes a payment event. Insufficient funds produce a recorded {@code FAILED} result
+     * without changing balances. A matching existing key returns its current result without another
+     * event.
+     *
+     * @param request amount in dollars, rounded to two decimal places using {@code HALF_UP};
+     *     currency must be USD, ignoring case
+     * @return the stored operation's result, including a failed reservation or a matching retry
+     * @throws CurrencyMismatchException if currency is missing, blank, or unsupported
+     * @throws IllegalArgumentException if the amount is null or nonpositive before rounding
+     * @throws CustomerNotFoundException if a new reservation's customer does not exist
+     * @throws PaymentIdempotencyConflictException if the key exists with a different operation
+     *     type, order, customer, rounded amount, or currency
+     * @throws DataIntegrityViolationException if saving the operation violates integrity
+     *     constraints and no operation can be found for its key
+     */
     public PaymentResult reserve(PaymentReservationRequest request) {
         LOGGER.info(
                 "Processing payment reservation for orderId: {}, customerId: {}",
@@ -146,6 +163,17 @@ public class PaymentService {
                 "Payment reserved successfully");
     }
 
+    /**
+     * Captures a reserved payment by reducing reserved funds, clamped at zero, and publishes the
+     * updated result. Available funds are unchanged. An already confirmed payment returns its
+     * stored result without changing balances or publishing another event.
+     *
+     * @param idempotencyKey the original reservation's key
+     * @return the confirmed payment result
+     * @throws PaymentNotFoundException if the key is unknown
+     * @throws CustomerNotFoundException if a reserved payment's customer is missing
+     * @throws InvalidPaymentTransitionException if the status is neither reserved nor confirmed
+     */
     public PaymentResult confirm(String idempotencyKey) {
         LOGGER.info("Processing payment confirmation for key: {}", idempotencyKey);
         PaymentOperation operation =
@@ -182,6 +210,17 @@ public class PaymentService {
         return result;
     }
 
+    /**
+     * Restores a reserved payment's amount to available funds, reduces reserved funds with a floor
+     * of zero, and publishes the updated result. An already released payment returns its stored
+     * result without changing balances or publishing another event.
+     *
+     * @param idempotencyKey the original reservation's key
+     * @return the released payment result
+     * @throws PaymentNotFoundException if the key is unknown
+     * @throws CustomerNotFoundException if a reserved payment's customer is missing
+     * @throws InvalidPaymentTransitionException if the status is neither reserved nor released
+     */
     public PaymentResult release(String idempotencyKey) {
         LOGGER.info("Processing payment release for key: {}", idempotencyKey);
         PaymentOperation operation =
@@ -219,6 +258,26 @@ public class PaymentService {
         return result;
     }
 
+    /**
+     * Credits available funds for a refund, records it, and publishes a payment event. Total
+     * refunds may equal but cannot exceed confirmed payments for the same order and customer. A
+     * matching key returns its stored result without another credit or event; the reason is ignored
+     * when matching.
+     *
+     * @param request amount in dollars, rounded to two decimal places using {@code HALF_UP}; a null
+     *     reason uses the default refund message
+     * @return the stored refund result
+     * @throws CurrencyMismatchException if currency is missing, blank, not USD ignoring case, or
+     *     differs from a confirmed payment's currency
+     * @throws IllegalArgumentException if the amount is null or nonpositive before rounding
+     * @throws CustomerNotFoundException if a new refund's customer does not exist
+     * @throws PaymentIdempotencyConflictException if the key exists with a different operation
+     *     type, order, customer, rounded amount, or currency
+     * @throws InvalidPaymentTransitionException if no confirmed payment exists for this order and
+     *     customer, or the rounded refund would exceed the remaining captured amount
+     * @throws DataIntegrityViolationException if saving the operation violates integrity
+     *     constraints and no operation can be found for its key
+     */
     public PaymentResult refund(PaymentRefundRequest request) {
         LOGGER.info(
                 "Processing payment refund for orderId: {}, customerId: {}",
@@ -310,6 +369,7 @@ public class PaymentService {
                         + (request.reason() != null ? request.reason() : "Customer refund"));
     }
 
+    /** Returns the stored payment result for the key, or empty if the key is unknown. */
     @Transactional(readOnly = true)
     public Optional<PaymentResult> getPaymentStatus(String idempotencyKey) {
         return operationRepository
@@ -317,6 +377,12 @@ public class PaymentService {
                 .map(this::mapToPaymentResult);
     }
 
+    /**
+     * Saves an operation and publishes its result. If saving raises an integrity error, returns an
+     * operation found under the same key without publishing an event or rechecking its parameters.
+     *
+     * @throws DataIntegrityViolationException if saving fails and no operation is found for the key
+     */
     private PaymentResult recordAndPublishOperation(
             String idempotencyKey,
             Long orderId,
@@ -372,6 +438,12 @@ public class PaymentService {
                 op.getMessage());
     }
 
+    /**
+     * Rejects reuse of a key with different operation parameters; amount scale and currency case do
+     * not affect the comparison.
+     *
+     * @throws PaymentIdempotencyConflictException if any compared parameter differs
+     */
     private void validateIdempotencyParameters(
             PaymentOperation existing,
             String idempotencyKey,
@@ -398,6 +470,12 @@ public class PaymentService {
         }
     }
 
+    /**
+     * Rounds a strictly positive dollar amount to two decimal places using {@code HALF_UP}. A
+     * positive amount below half a cent rounds to zero.
+     *
+     * @throws IllegalArgumentException if the amount is null or nonpositive before rounding
+     */
     private BigDecimal normalizeAmount(BigDecimal amount) {
         if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("Amount must be strictly positive");

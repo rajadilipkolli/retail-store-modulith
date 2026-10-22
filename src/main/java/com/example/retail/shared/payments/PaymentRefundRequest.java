@@ -25,6 +25,7 @@ public record PaymentRefundRequest(
 
     @Serial private static final long serialVersionUID = 1L;
 
+    /** Creates a refund request denominated in USD. */
     public PaymentRefundRequest(
             String idempotencyKey,
             Long orderId,

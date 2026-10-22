@@ -39,6 +39,12 @@ public class CustomerController {
         this.customerService = customerService;
     }
 
+    /**
+     * Returns HTTP 200 with a customer page. A nonblank email selects an untrimmed email lookup and
+     * ignores pagination and sorting, returning a singleton or empty page. Otherwise, page numbers
+     * are zero-based and sorting follows {@link CustomerService#findAllCustomers(int, int, String,
+     * String)}.
+     */
     @GetMapping
     public ResponseEntity<PagedResult<CustomerResponse>> getAllCustomers(
             @RequestParam(required = false) String email,
@@ -57,6 +63,7 @@ public class CustomerController {
                 customerService.findAllCustomers(pageNo, pageSize, sortBy, sortDir));
     }
 
+    /** Returns HTTP 200 with customer details, or HTTP 404 if the ID is unknown. */
     @GetMapping("/{id}")
     public ResponseEntity<CustomerResponse> getCustomerById(@PathVariable Long id) {
         return customerService
@@ -65,6 +72,7 @@ public class CustomerController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /** Returns HTTP 200 with customer details, or HTTP 404 if the email is unknown. */
     @GetMapping("/email/{email}")
     public ResponseEntity<CustomerResponse> getCustomerByEmail(@PathVariable String email) {
         return customerService
@@ -73,6 +81,10 @@ public class CustomerController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /**
+     * Creates a customer and returns HTTP 201 with saved details and the customer resource
+     * location.
+     */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity<CustomerResponse> createCustomer(
@@ -82,6 +94,9 @@ public class CustomerController {
                 .body(response);
     }
 
+    /**
+     * Updates customer details and returns HTTP 200 with the result, or HTTP 404 for an unknown ID.
+     */
     @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<CustomerResponse> updateCustomer(
             @PathVariable Long id, @RequestBody @Valid CustomerRequest customerRequest) {
@@ -91,6 +106,7 @@ public class CustomerController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /** Deletes the customer and returns HTTP 200 with the former details, or HTTP 404 if absent. */
     @DeleteMapping("/{id}")
     public ResponseEntity<CustomerResponse> deleteCustomer(@PathVariable Long id) {
         return customerService

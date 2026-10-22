@@ -63,6 +63,7 @@ public class PaymentOperation {
 
     public PaymentOperation() {}
 
+    /** Creates an operation without an ID, using the supplied instant for both timestamps. */
     public PaymentOperation(
             String idempotencyKey,
             Long orderId,
@@ -87,6 +88,10 @@ public class PaymentOperation {
                 createdAt);
     }
 
+    /**
+     * Creates an operation, defaulting a null currency to USD without validating or rounding
+     * amounts.
+     */
     public PaymentOperation(
             Long id,
             String idempotencyKey,

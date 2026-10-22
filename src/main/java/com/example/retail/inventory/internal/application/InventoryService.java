@@ -185,6 +185,9 @@ public class InventoryService {
                 matching.size());
     }
 
+    /**
+     * Creates inventory with zero available and reserved quantities if the product code is absent.
+     */
     public void initializeProductInventory(String productCode) {
         if (!inventoryRepository.existsByProductCode(productCode)) {
             Inventory inventory = new Inventory().setProductCode(productCode);

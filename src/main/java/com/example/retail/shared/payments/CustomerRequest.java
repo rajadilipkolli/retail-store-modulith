@@ -29,6 +29,7 @@ public record CustomerRequest(
 
     @Serial private static final long serialVersionUID = 1L;
 
+    /** Creates a request with zero available funds. */
     public CustomerRequest(
             String name,
             String email,

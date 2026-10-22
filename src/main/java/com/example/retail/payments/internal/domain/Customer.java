@@ -61,6 +61,9 @@ public class Customer {
 
     public Customer() {}
 
+    /**
+     * Creates a customer, treating null available or reserved balances as zero without rounding.
+     */
     public Customer(
             Long id,
             String name,

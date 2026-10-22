@@ -24,6 +24,7 @@ public record PaymentReservationRequest(
 
     @Serial private static final long serialVersionUID = 1L;
 
+    /** Creates a reservation request denominated in USD. */
     public PaymentReservationRequest(
             String idempotencyKey, Long orderId, Long customerId, BigDecimal amount) {
         this(idempotencyKey, orderId, customerId, amount, "USD");
