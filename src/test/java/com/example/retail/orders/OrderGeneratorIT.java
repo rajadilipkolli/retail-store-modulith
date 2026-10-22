@@ -12,7 +12,11 @@ import com.example.retail.orders.internal.application.OrderGeneratorService;
 import com.example.retail.orders.internal.domain.OrderGeneration;
 import com.example.retail.orders.internal.persistence.OrderGenerationRepository;
 import com.example.retail.orders.internal.persistence.OrderRepository;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,5 +58,60 @@ class OrderGeneratorIT {
 
         long afterReplayCount = orderRepository.count();
         assertThat(afterReplayCount).isEqualTo(afterFirstCount);
+    }
+
+    @Test
+    void onlyOneWorkerCanResumeFailedGeneration() throws Exception {
+        String key = "resume-race-" + System.nanoTime();
+        generationRepository.createInitial(key, 25, 3);
+        generationRepository.updateProgress(key, 1);
+        assertThat(generationRepository.markResumed(key)).isFalse();
+        generationRepository.markFailed(key, "retry");
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var tasks =
+                    java.util.stream.IntStream.range(0, 2)
+                            .mapToObj(
+                                    i ->
+                                            executor.submit(
+                                                    () -> {
+                                                        assertThat(
+                                                                        generationRepository
+                                                                                .findByIdempotencyKey(
+                                                                                        key)
+                                                                                .orElseThrow()
+                                                                                .status())
+                                                                .isEqualTo(
+                                                                        OrderGeneration
+                                                                                .STATUS_FAILED);
+                                                        ready.countDown();
+                                                        assertThat(
+                                                                        start.await(
+                                                                                10,
+                                                                                TimeUnit.SECONDS))
+                                                                .isTrue();
+                                                        return generationRepository.markResumed(
+                                                                key);
+                                                    }))
+                            .toList();
+            try {
+                assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                start.countDown();
+            }
+            assertThat(
+                            List.of(
+                                    tasks.get(0).get(10, TimeUnit.SECONDS),
+                                    tasks.get(1).get(10, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(true, false);
+        }
+        var resumed = generationRepository.findByIdempotencyKey(key).orElseThrow();
+        assertThat(resumed.status()).isEqualTo(OrderGeneration.STATUS_IN_PROGRESS);
+        assertThat(resumed.completedBatches()).isEqualTo(1);
+        assertThat(resumed.errorMessage()).isNull();
+        generationRepository.markCompleted(key, 3);
+        assertThat(generationRepository.markResumed(key)).isFalse();
+        assertThat(generationRepository.markResumed("missing-key")).isFalse();
     }
 }

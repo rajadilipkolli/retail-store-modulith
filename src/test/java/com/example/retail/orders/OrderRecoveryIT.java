@@ -21,12 +21,16 @@ import com.example.retail.shared.inventory.*;
 import com.example.retail.shared.orders.*;
 import com.example.retail.shared.payments.*;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -38,6 +42,7 @@ import tools.jackson.databind.ObjectMapper;
 @Import(ContainersConfig.class)
 class OrderRecoveryIT {
     @Autowired OrdersFacade facade;
+    @Autowired JdbcClient jdbc;
     @MockitoSpyBean OrderRepository orders;
     @Autowired OrderIdempotencyRepository claims;
     @Autowired CatalogFacade catalog;
@@ -249,5 +254,138 @@ class OrderRecoveryIT {
                 .isEqualByComparingTo(balance.subtract(new BigDecimal("249.99")));
         assertThat(inventory.findInventoryByProductCode("P005").orElseThrow().availableQuantity())
                 .isEqualTo(stock - 1);
+    }
+
+    private void changeClaim(Long id, Consumer<OrderIdempotency> mutation) {
+        var independent = new TransactionTemplate(manager);
+        independent.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        independent.executeWithoutResult(
+                tx -> {
+                    jdbc.sql("SET LOCAL lock_timeout = '1s'").update();
+                    OrderIdempotency claim = claims.findLockedById(id).orElseThrow();
+                    mutation.accept(claim);
+                    claims.save(claim);
+                });
+    }
+
+    @Test
+    void businessStepDoesNotHoldClaimLockAndActiveLeaseRejectsCompetingWorkers() {
+        String key = key();
+        doAnswer(
+                        invocation -> {
+                            InventoryReservationRequest reservation = invocation.getArgument(0);
+                            OrderIdempotency current = claim(101L, key);
+                            changeClaim(
+                                    current.getId(),
+                                    locked -> {
+                                        assertThat(locked.getClaimOwner()).isNotBlank();
+                                        assertThat(locked.getLeaseExpiresAt())
+                                                .isAfter(LocalDateTime.now());
+                                    });
+                            assertThatThrownBy(
+                                            () -> freshWorker().cancelOrder(reservation.orderId()))
+                                    .isInstanceOf(IdempotencyConflictException.class);
+                            freshWorker().recoverPendingOrders();
+                            return invocation.callRealMethod();
+                        })
+                .when(inventory)
+                .reserve(any());
+
+        var result = facade.createOrder(request(101L, 1), key);
+
+        verify(inventory, times(1)).reserve(argThat(r -> r.orderId().equals(result.orderId())));
+        assertThat(result.status()).isEqualTo("CONFIRMED");
+        assertThat(claim(101L, key).getClaimOwner()).isNull();
+        assertThat(claim(101L, key).getLeaseExpiresAt()).isNull();
+    }
+
+    @Test
+    void expiredWorkerCannotOverwriteCancellationByNewOwner() {
+        String key = key();
+        var balance = payments.findCustomerById(101L).orElseThrow().amountAvailable();
+        int stock = inventory.findInventoryByProductCode("P005").orElseThrow().availableQuantity();
+        AtomicBoolean consumed = new AtomicBoolean();
+        doAnswer(
+                        invocation -> {
+                            Object result = invocation.callRealMethod();
+                            consumed.set(true);
+                            return result;
+                        })
+                .when(inventory)
+                .consume(anyString());
+        OrderRepository workerOrders =
+                mock(OrderRepository.class, org.mockito.AdditionalAnswers.delegatesTo(orders));
+        doAnswer(
+                        invocation -> {
+                            var result = orders.findOrderById(invocation.getArgument(0));
+                            // Take over after the consume transaction commits, before finalization
+                            // starts.
+                            if (consumed.compareAndSet(true, false)) {
+                                var current = claim(101L, key);
+                                changeClaim(
+                                        current.getId(),
+                                        c ->
+                                                c.setLeaseExpiresAt(
+                                                        LocalDateTime.now().minusMinutes(1)));
+                                freshWorker().cancelOrder(current.getOrderId());
+                            }
+                            return result;
+                        })
+                .when(workerOrders)
+                .findOrderById(anyLong());
+        var staleWorker =
+                new OrdersFacadeImpl(
+                        workerOrders,
+                        claims,
+                        catalog,
+                        inventory,
+                        payments,
+                        new OrderRequestFingerprinter(),
+                        events,
+                        mapper,
+                        manager);
+
+        assertThatThrownBy(() -> staleWorker.createOrder(request(101L, 1), key))
+                .isInstanceOf(IdempotencyConflictException.class);
+
+        var current = claim(101L, key);
+        assertThat(current.getStatus()).isEqualTo(OrderIdempotency.STATUS_COMPLETED);
+        assertThat(orders.findOrderById(current.getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(OrderStatus.ROLLBACK);
+        assertThat(facade.createOrder(request(101L, 1), key).status()).isEqualTo("ROLLBACK");
+        assertThat(payments.findCustomerById(101L).orElseThrow().amountAvailable())
+                .isEqualByComparingTo(balance);
+        assertThat(inventory.findInventoryByProductCode("P005").orElseThrow().availableQuantity())
+                .isEqualTo(stock);
+    }
+
+    @Test
+    void replacedOwnerCannotCompleteOrReleaseAnotherWorkersProcessingClaim() {
+        String key = key();
+        doAnswer(
+                        invocation -> {
+                            Object result = invocation.callRealMethod();
+                            var current = claim(101L, key);
+                            changeClaim(current.getId(), c -> c.setClaimOwner("replacement-owner"));
+                            return result;
+                        })
+                .doCallRealMethod()
+                .when(inventory)
+                .consume(anyString());
+
+        assertThatThrownBy(() -> facade.createOrder(request(101L, 1), key))
+                .isInstanceOf(IdempotencyConflictException.class);
+
+        var current = claim(101L, key);
+        assertThat(current.getStatus()).isEqualTo(OrderIdempotency.STATUS_PROCESSING);
+        assertThat(current.getClaimOwner()).isEqualTo("replacement-owner");
+        assertThat(orders.findOrderById(current.getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(OrderStatus.NEW);
+        changeClaim(current.getId(), c -> c.setLeaseExpiresAt(LocalDateTime.now().minusMinutes(1)));
+        freshWorker().recoverPendingOrders();
+        assertThat(claim(101L, key).getStatus()).isEqualTo(OrderIdempotency.STATUS_COMPLETED);
+        assertThat(claim(101L, key).getClaimOwner()).isNull();
+        assertThat(orders.findOrderById(current.getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(OrderStatus.CONFIRMED);
     }
 }

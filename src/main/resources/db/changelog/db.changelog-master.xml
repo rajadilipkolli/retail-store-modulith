@@ -26,6 +26,7 @@
     <include file="db/changelog/orders/03-insert-sample-orders.xml"/>
     <include file="db/changelog/orders/04-add-order-operation-key.xml"/>
     <include file="db/changelog/orders/05-create-order-generation-table.xml"/>
+    <include file="db/changelog/orders/06-add-order-claim-lease.xml"/>
 
     <include file="db/changelog/shared/01-create-event-publication.sql"/>
     <include file="db/changelog/shared/02-create-event-publication-archive.sql"/>

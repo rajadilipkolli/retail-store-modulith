@@ -149,7 +149,7 @@ Criterion	Status	Evidence	Notes
 Payment and customer account behavior is migrated	PASS	com.example.retail.payments with isolated domain, application, persistence, and web packages	Spring MVC, pure synchronous controllers & services
 Payments owns its persistence	PASS	PostgreSQL isolated payment schema (payment.customers & payment.payment_operations)	All entities use @Tsid(TsidSupplier.class)
 A documented public module API exists	PASS	com.example.retail.payments.PaymentsFacade and DTOs in com.example.retail.shared.payments	PaymentsFacadeImpl delegates cleanly
-The canonical money policy is verified against existing behavior or explicitly approved before migration, and every policy rule has passing tests	PASS	ADR-0006 is Accepted; canonical USD NUMERIC(19,2) BigDecimal policy verified	All policy rules verified with unit and integration tests
+The canonical money policy is verified against existing behavior or explicitly approved before migration, and every policy rule has passing tests	PASS	[ADR-0006](../architecture/decisions/0006-canonical-money-policy.md) is Accepted; canonical USD NUMERIC(19,2) BigDecimal policy verified	All policy rules verified with unit and integration tests; the historical pending money-policy decision is resolved by Accepted ADR-0006
 Monetary calculations use appropriate precise representations	PASS	BigDecimal and NUMERIC(19,2) with non-negative constraints	Verified in PaymentPersistenceIT & PaymentServiceTest
 Payment coexistence and rollback enforce one write owner for migrated operations	PASS	Payments module is single write owner for migrated data; pessimistic write locking prevents overdrafts	Verified via PaymentConcurrencyIT
 Financial state transitions are validated	PASS	State machine (RESERVED -> CONFIRMED / RELEASED / REFUNDED / FAILED)	Invalid transitions rejected with 400 Bad Request
@@ -171,12 +171,11 @@ python tools/verify-specs.py	PASS	Checks executed: 187; Errors: 0; Warnings: 0; 
 
 Outstanding issues
 
-- The acceptance table reports ADR-0006 and money-policy verification as complete, while the prior decision recorded them as pending. Reconcile these records with the supporting review evidence before completion.
 - Required reviewer approval is pending.
 
 Decision
 
-Phase 4 remains IN_PROGRESS until required reviewer approval is recorded and the ADR-0006 decision, canonical money-policy evidence, and outstanding issues are reconciled.
+Phase 4 remains IN_PROGRESS until required reviewer approval is recorded. [ADR-0006](../architecture/decisions/0006-canonical-money-policy.md) is Accepted, resolving the historical pending money-policy decision; canonical money-policy verification is complete as recorded above.
 
 ### Phase 3 Evidence Record
 

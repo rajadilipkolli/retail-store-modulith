@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -191,11 +192,17 @@ public class OrdersFacadeImpl implements OrdersFacade {
 
     private record SagaResult(OrderResponse response, RuntimeException failure) {}
 
-    private SagaResult process(Long claimId) {
+    private record ClaimWork(
+            Long id,
+            String status,
+            String owner,
+            String key,
+            String responsePayload,
+            Order order) {}
+
+    private ClaimWork acquireClaim(Long claimId) {
         return transactions.execute(
                 tx -> {
-                    // Serialize checkout, recovery and cancellation across all application
-                    // instances.
                     OrderIdempotency claim =
                             idempotencyRepository.findLockedById(claimId).orElseThrow();
                     Order order =
@@ -203,110 +210,188 @@ public class OrdersFacadeImpl implements OrdersFacade {
                                     .findOrderById(claim.getOrderId())
                                     .orElseThrow(
                                             () -> new OrderNotFoundException(claim.getOrderId()));
-                    String key =
+                    String owner = null;
+                    if (!OrderIdempotency.STATUS_COMPLETED.equals(claim.getStatus())
+                            && !OrderIdempotency.STATUS_FAILED.equals(claim.getStatus())) {
+                        requireAvailableClaim(claim);
+                        owner = UUID.randomUUID().toString();
+                        claim.setClaimOwner(owner)
+                                .setLeaseExpiresAt(LocalDateTime.now().plusMinutes(5));
+                        idempotencyRepository.save(claim);
+                    }
+                    return new ClaimWork(
+                            claimId,
+                            claim.getStatus(),
+                            owner,
                             claim.getOperationKey() != null
                                     ? claim.getOperationKey()
-                                    : claim.getIdempotencyKey();
-                    if (OrderIdempotency.STATUS_COMPLETED.equals(claim.getStatus())) {
-                        return new SagaResult(
-                                claim.getResponsePayload() == null
-                                        ? toOrderResponse(order)
-                                        : objectMapper.readValue(
-                                                claim.getResponsePayload(), OrderResponse.class),
-                                null);
-                    }
-                    if (OrderIdempotency.STATUS_CANCELLING.equals(claim.getStatus())
-                            || OrderIdempotency.STATUS_COMPENSATING.equals(claim.getStatus())) {
-                        compensate(order, key);
-                        boolean cancelling =
-                                OrderIdempotency.STATUS_CANCELLING.equals(claim.getStatus());
-                        order.setStatus(cancelling ? OrderStatus.ROLLBACK : OrderStatus.FAILED);
-                        claim.setStatus(
-                                cancelling
-                                        ? OrderIdempotency.STATUS_COMPLETED
-                                        : OrderIdempotency.STATUS_FAILED);
-                        if (cancelling) {
-                            if (claim.getResponsePayload() == null) {
-                                claim.setResponsePayload(
-                                        objectMapper.writeValueAsString(toOrderResponse(order)));
-                            }
-                            eventPublisher.publishEvent(toOrderDto(order));
-                        }
-                        orderRepository.save(order);
-                        idempotencyRepository.save(claim);
-                        return new SagaResult(toOrderResponse(order), null);
-                    }
-                    if (OrderIdempotency.STATUS_FAILED.equals(claim.getStatus())) {
-                        return new SagaResult(toOrderResponse(order), null);
-                    }
-                    String source = "INVENTORY";
-                    try {
-                        var inventory =
-                                transactions.execute(
-                                        step ->
-                                                inventoryFacade.reserve(
-                                                        new InventoryReservationRequest(
-                                                                key,
-                                                                order.getId(),
-                                                                order.getItems().stream()
-                                                                        .map(
-                                                                                item ->
-                                                                                        new ReservationItem(
-                                                                                                item
-                                                                                                        .getProductCode(),
-                                                                                                item
-                                                                                                        .getQuantity()))
-                                                                        .toList())));
-                        if (inventory.status() != InventoryReservationStatus.RESERVED
-                                && inventory.status() != InventoryReservationStatus.CONSUMED) {
-                            throw new IllegalArgumentException(
-                                    "Inventory reservation failed: " + inventory.message());
-                        }
-                        source = "PAYMENT";
-                        var payment =
-                                transactions.execute(
-                                        step ->
-                                                paymentsFacade.reserve(
-                                                        new PaymentReservationRequest(
-                                                                key,
-                                                                order.getId(),
-                                                                order.getCustomerId(),
-                                                                order.getTotalPrice(),
-                                                                "USD")));
-                        if (payment.status() != PaymentStatus.RESERVED
-                                && payment.status() != PaymentStatus.CONFIRMED) {
-                            throw new IllegalArgumentException(
-                                    "Payment reservation failed: " + payment.message());
-                        }
-                    } catch (RuntimeException ex) {
-                        order.setStatus(OrderStatus.FAILED).setSource(source);
-                        orderRepository.save(order);
-                        claim.setStatus(OrderIdempotency.STATUS_COMPENSATING);
-                        idempotencyRepository.save(claim);
-                        // Return instead of throwing so FAILED and compensation intent are
-                        // committed first.
-                        return new SagaResult(null, ex);
-                    }
-                    // On failure here PROCESSING survives. Recovery replays these idempotent
-                    // operations.
-                    transactions.execute(step -> paymentsFacade.confirm(key));
-                    transactions.execute(step -> inventoryFacade.consume(key));
-                    order.setStatus(OrderStatus.CONFIRMED).setLastModifiedDate(LocalDateTime.now());
-                    orderRepository.save(order);
-                    eventPublisher.publishEvent(
-                            new OrderConfirmedEvent(
-                                    order.getId(),
-                                    order.getCustomerId(),
-                                    order.getTotalPrice(),
-                                    "USD",
-                                    LocalDateTime.now()));
-                    eventPublisher.publishEvent(toOrderDto(order));
-                    OrderResponse response = toOrderResponse(order);
-                    claim.setResponsePayload(objectMapper.writeValueAsString(response))
-                            .setStatus(OrderIdempotency.STATUS_COMPLETED)
+                                    : claim.getIdempotencyKey(),
+                            claim.getResponsePayload(),
+                            order);
+                });
+    }
+
+    private static void requireAvailableClaim(OrderIdempotency claim) {
+        if (claim.getClaimOwner() != null
+                && claim.getLeaseExpiresAt() != null
+                && claim.getLeaseExpiresAt().isAfter(LocalDateTime.now())) {
+            throw new IdempotencyConflictException("Order processing is already in progress");
+        }
+    }
+
+    private <T> T businessStep(ClaimWork work, Supplier<T> action) {
+        LocalDateTime now = LocalDateTime.now();
+        int renewed =
+                transactions.execute(
+                        tx ->
+                                idempotencyRepository.renewLease(
+                                        work.id(),
+                                        work.status(),
+                                        work.owner(),
+                                        now,
+                                        now.plusMinutes(5)));
+        if (renewed != 1) {
+            throw new IdempotencyConflictException("Order processing lease is no longer owned");
+        }
+        // The lease renewal commits before calling a module. No claim row lock is held here.
+        return transactions.execute(step -> action.get());
+    }
+
+    private SagaResult process(Long claimId) {
+        ClaimWork work = acquireClaim(claimId);
+        if (work.owner() == null) {
+            return new SagaResult(
+                    OrderIdempotency.STATUS_COMPLETED.equals(work.status())
+                                    && work.responsePayload() != null
+                            ? objectMapper.readValue(work.responsePayload(), OrderResponse.class)
+                            : toOrderResponse(work.order()),
+                    null);
+        }
+        try {
+            Order order = work.order();
+            String key = work.key();
+            if (OrderIdempotency.STATUS_CANCELLING.equals(work.status())
+                    || OrderIdempotency.STATUS_COMPENSATING.equals(work.status())) {
+                compensate(work);
+                return complete(
+                        work,
+                        OrderIdempotency.STATUS_CANCELLING.equals(work.status())
+                                ? OrderStatus.ROLLBACK
+                                : OrderStatus.FAILED,
+                        order.getSource(),
+                        null);
+            }
+            String source = "INVENTORY";
+            try {
+                var inventory =
+                        businessStep(
+                                work,
+                                () ->
+                                        inventoryFacade.reserve(
+                                                new InventoryReservationRequest(
+                                                        key,
+                                                        order.getId(),
+                                                        order.getItems().stream()
+                                                                .map(
+                                                                        item ->
+                                                                                new ReservationItem(
+                                                                                        item
+                                                                                                .getProductCode(),
+                                                                                        item
+                                                                                                .getQuantity()))
+                                                                .toList())));
+                if (inventory.status() != InventoryReservationStatus.RESERVED
+                        && inventory.status() != InventoryReservationStatus.CONSUMED) {
+                    throw new IllegalArgumentException(
+                            "Inventory reservation failed: " + inventory.message());
+                }
+                source = "PAYMENT";
+                var payment =
+                        businessStep(
+                                work,
+                                () ->
+                                        paymentsFacade.reserve(
+                                                new PaymentReservationRequest(
+                                                        key,
+                                                        order.getId(),
+                                                        order.getCustomerId(),
+                                                        order.getTotalPrice(),
+                                                        "USD")));
+                if (payment.status() != PaymentStatus.RESERVED
+                        && payment.status() != PaymentStatus.CONFIRMED) {
+                    throw new IllegalArgumentException(
+                            "Payment reservation failed: " + payment.message());
+                }
+            } catch (RuntimeException ex) {
+                // Commit the failure and compensation intent before returning the error.
+                return complete(work, OrderStatus.FAILED, source, ex);
+            }
+            businessStep(work, () -> paymentsFacade.confirm(key));
+            businessStep(work, () -> inventoryFacade.consume(key));
+            return complete(work, OrderStatus.CONFIRMED, order.getSource(), null);
+        } catch (RuntimeException ex) {
+            try {
+                transactions.execute(
+                        tx ->
+                                idempotencyRepository.releaseLease(
+                                        work.id(), work.status(), work.owner()));
+            } catch (RuntimeException releaseFailure) {
+                ex.addSuppressed(releaseFailure);
+            }
+            throw ex;
+        }
+    }
+
+    private SagaResult complete(
+            ClaimWork work, OrderStatus status, String source, RuntimeException failure) {
+        return transactions.execute(
+                tx -> {
+                    Order order =
+                            orderRepository
+                                    .findOrderById(work.order().getId())
+                                    .orElseThrow(
+                                            () -> new OrderNotFoundException(work.order().getId()));
+                    order.setStatus(status)
+                            .setSource(source)
                             .setLastModifiedDate(LocalDateTime.now());
-                    idempotencyRepository.save(claim);
-                    return new SagaResult(response, null);
+                    OrderResponse response = toOrderResponse(order);
+                    String claimStatus =
+                            failure != null
+                                    ? OrderIdempotency.STATUS_COMPENSATING
+                                    : status == OrderStatus.FAILED
+                                            ? OrderIdempotency.STATUS_FAILED
+                                            : OrderIdempotency.STATUS_COMPLETED;
+                    String payload =
+                            status == OrderStatus.CONFIRMED
+                                            || (status == OrderStatus.ROLLBACK
+                                                    && work.responsePayload() == null)
+                                    ? objectMapper.writeValueAsString(response)
+                                    : work.responsePayload();
+                    if (idempotencyRepository.completeClaim(
+                                    work.id(),
+                                    work.status(),
+                                    work.owner(),
+                                    LocalDateTime.now(),
+                                    claimStatus,
+                                    payload)
+                            != 1) {
+                        throw new IdempotencyConflictException(
+                                "Order processing lease is no longer owned");
+                    }
+                    orderRepository.save(order);
+                    if (status == OrderStatus.CONFIRMED) {
+                        eventPublisher.publishEvent(
+                                new OrderConfirmedEvent(
+                                        order.getId(),
+                                        order.getCustomerId(),
+                                        order.getTotalPrice(),
+                                        "USD",
+                                        LocalDateTime.now()));
+                    }
+                    if (status == OrderStatus.CONFIRMED || status == OrderStatus.ROLLBACK) {
+                        eventPublisher.publishEvent(toOrderDto(order));
+                    }
+                    return new SagaResult(failure == null ? response : null, failure);
                 });
     }
 
@@ -314,7 +399,9 @@ public class OrdersFacadeImpl implements OrdersFacade {
         return "order-" + orderId;
     }
 
-    private void compensate(Order order, String key) {
+    private void compensate(ClaimWork work) {
+        Order order = work.order();
+        String key = work.key();
         var payment = paymentsFacade.getPaymentStatus(key);
         if (order.getStatus() == OrderStatus.CONFIRMED && payment.isEmpty()) {
             throw new IllegalStateException(
@@ -322,8 +409,9 @@ public class OrdersFacadeImpl implements OrdersFacade {
         }
         if (payment.isPresent()) {
             if (payment.get().status() == PaymentStatus.CONFIRMED) {
-                transactions.execute(
-                        step ->
+                businessStep(
+                        work,
+                        () ->
                                 paymentsFacade.refund(
                                         new PaymentRefundRequest(
                                                 "cancel-" + order.getId(),
@@ -333,7 +421,7 @@ public class OrdersFacadeImpl implements OrdersFacade {
                                                 "USD",
                                                 "Order compensation")));
             } else if (payment.get().status() == PaymentStatus.RESERVED) {
-                transactions.execute(step -> paymentsFacade.release(key));
+                businessStep(work, () -> paymentsFacade.release(key));
             }
         }
         var inventory = inventoryFacade.getReservationStatus(key);
@@ -344,7 +432,7 @@ public class OrdersFacadeImpl implements OrdersFacade {
         if (inventory.isPresent()
                 && (inventory.get().status() == InventoryReservationStatus.RESERVED
                         || inventory.get().status() == InventoryReservationStatus.CONSUMED)) {
-            transactions.execute(step -> inventoryFacade.cancelReservation(key));
+            businessStep(work, () -> inventoryFacade.cancelReservation(key));
         }
     }
 
@@ -461,7 +549,10 @@ public class OrdersFacadeImpl implements OrdersFacade {
                                             .findOrderById(id)
                                             .orElseThrow(() -> new OrderNotFoundException(id));
                             if (order.getStatus() != OrderStatus.ROLLBACK) {
-                                claim.setStatus(OrderIdempotency.STATUS_CANCELLING);
+                                requireAvailableClaim(claim);
+                                claim.setStatus(OrderIdempotency.STATUS_CANCELLING)
+                                        .setClaimOwner(null)
+                                        .setLeaseExpiresAt(null);
                                 idempotencyRepository.save(claim);
                             }
                             return claim.getId();

@@ -20,6 +20,7 @@ import com.example.retail.orders.internal.application.OrderGeneratorService;
 import com.example.retail.orders.internal.domain.OrderGeneration;
 import com.example.retail.orders.internal.persistence.OrderGenerationRepository;
 import com.example.retail.shared.orders.OrderRequest;
+import com.example.retail.shared.orders.OrderResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -149,6 +150,7 @@ class OrderGeneratorServiceTest {
                         LocalDateTime.now().minusMinutes(5),
                         LocalDateTime.now().minusMinutes(4));
         given(generationRepository.findByIdempotencyKey(key)).willReturn(Optional.of(failed));
+        given(generationRepository.markResumed(key)).willReturn(true);
 
         generatorService.generateOrders(key, 25);
 
@@ -182,6 +184,50 @@ class OrderGeneratorServiceTest {
                 .hasMessage("Simulated batch failure");
 
         verify(generationRepository).markFailed(key, "Simulated batch failure");
+        verify(generationRepository, never()).markCompleted(anyString(), anyInt());
+    }
+
+    @Test
+    void lostResumeClaimDoesNotProcessOrChangeProgress() {
+        String key = "gen-lost-resume";
+        given(generationRepository.findByIdempotencyKey(key))
+                .willReturn(
+                        Optional.of(
+                                new OrderGeneration(
+                                        key,
+                                        25,
+                                        3,
+                                        1,
+                                        OrderGeneration.STATUS_FAILED,
+                                        "failure",
+                                        LocalDateTime.now(),
+                                        LocalDateTime.now())));
+        given(generationRepository.markResumed(key)).willReturn(false);
+
+        generatorService.generateOrders(key, 25);
+
+        verify(ordersFacade, never()).saveBatchOrders(any());
+        verify(generationRepository, never()).updateProgress(anyString(), anyInt());
+        verify(generationRepository, never()).markCompleted(anyString(), anyInt());
+        verify(generationRepository, never()).markFailed(anyString(), anyString());
+    }
+
+    @Test
+    void failedOrderResponseDoesNotAdvanceBatchProgress() {
+        String key = "gen-partial-failure";
+        given(generationRepository.createInitial(key, 20, 2)).willReturn(true);
+        OrderResponse success = org.mockito.Mockito.mock(OrderResponse.class);
+        given(success.orderId()).willReturn(1L);
+        given(ordersFacade.saveBatchOrders(any()))
+                .willReturn(List.of(success), List.of(success, OrderResponse.emptyResponse(null)));
+
+        assertThatThrownBy(() -> generatorService.generateOrders(key, 20))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Batch contains failed orders");
+
+        verify(generationRepository).updateProgress(key, 1);
+        verify(generationRepository, never()).updateProgress(key, 2);
+        verify(generationRepository).markFailed(key, "Batch contains failed orders");
         verify(generationRepository, never()).markCompleted(anyString(), anyInt());
     }
 

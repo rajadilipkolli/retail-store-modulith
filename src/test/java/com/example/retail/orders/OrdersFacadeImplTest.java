@@ -76,6 +76,40 @@ class OrdersFacadeImplTest {
                         });
         when(claims.findLockedById(anyLong()))
                 .thenAnswer(inv -> Optional.ofNullable(claimState.get(inv.getArgument(0))));
+        when(claims.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(claims.renewLease(anyLong(), anyString(), anyString(), any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            OrderIdempotency claim = claimState.get(inv.getArgument(0));
+                            if (!claim.getStatus().equals(inv.getArgument(1))
+                                    || !Objects.equals(claim.getClaimOwner(), inv.getArgument(2)))
+                                return 0;
+                            claim.setLeaseExpiresAt(inv.getArgument(4));
+                            return 1;
+                        });
+        when(claims.releaseLease(anyLong(), anyString(), anyString()))
+                .thenAnswer(
+                        inv -> {
+                            OrderIdempotency claim = claimState.get(inv.getArgument(0));
+                            if (!claim.getStatus().equals(inv.getArgument(1))
+                                    || !Objects.equals(claim.getClaimOwner(), inv.getArgument(2)))
+                                return 0;
+                            claim.setClaimOwner(null).setLeaseExpiresAt(null);
+                            return 1;
+                        });
+        when(claims.completeClaim(anyLong(), anyString(), anyString(), any(), anyString(), any()))
+                .thenAnswer(
+                        inv -> {
+                            OrderIdempotency claim = claimState.get(inv.getArgument(0));
+                            if (!claim.getStatus().equals(inv.getArgument(1))
+                                    || !Objects.equals(claim.getClaimOwner(), inv.getArgument(2)))
+                                return 0;
+                            claim.setStatus(inv.getArgument(4))
+                                    .setResponsePayload(inv.getArgument(5))
+                                    .setClaimOwner(null)
+                                    .setLeaseExpiresAt(null);
+                            return 1;
+                        });
         when(claims.findByOrderId(anyLong()))
                 .thenAnswer(inv -> Optional.ofNullable(claimState.get(inv.getArgument(0))));
         when(claims.findByCustomerIdAndIdempotencyKey(anyLong(), anyString()))

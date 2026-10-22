@@ -65,6 +65,30 @@ public class OrderIdempotency implements Serializable {
     @Column(name = "last_modified_date")
     private LocalDateTime lastModifiedDate;
 
+    @Column(name = "claim_owner")
+    private String claimOwner;
+
+    @Column(name = "lease_expires_at")
+    private LocalDateTime leaseExpiresAt;
+
+    public String getClaimOwner() {
+        return claimOwner;
+    }
+
+    public OrderIdempotency setClaimOwner(String claimOwner) {
+        this.claimOwner = claimOwner;
+        return this;
+    }
+
+    public LocalDateTime getLeaseExpiresAt() {
+        return leaseExpiresAt;
+    }
+
+    public OrderIdempotency setLeaseExpiresAt(LocalDateTime leaseExpiresAt) {
+        this.leaseExpiresAt = leaseExpiresAt;
+        return this;
+    }
+
     public Long getId() {
         return id;
     }

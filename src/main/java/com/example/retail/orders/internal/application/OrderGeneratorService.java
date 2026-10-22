@@ -69,6 +69,9 @@ public class OrderGeneratorService {
                 return;
             }
             if (OrderGeneration.STATUS_FAILED.equals(existing.status())) {
+                if (!generationRepository.markResumed(idempotencyKey)) {
+                    return;
+                }
                 log.info(
                         "Resuming failed order generation for key '{}' from batch {} of {}",
                         idempotencyKey,
@@ -77,7 +80,6 @@ public class OrderGeneratorService {
                 startBatchIndex = existing.completedBatches();
                 resolvedBatchSize = existing.batchSize();
                 totalBatches = existing.totalBatches();
-                generationRepository.markResumed(idempotencyKey);
             }
         }
 
@@ -96,7 +98,10 @@ public class OrderGeneratorService {
                                     addressForCustomer(customerId)));
                 }
 
-                ordersFacade.saveBatchOrders(batchRequests);
+                var responses = ordersFacade.saveBatchOrders(batchRequests);
+                if (responses.stream().anyMatch(response -> response.orderId() == null)) {
+                    throw new IllegalStateException("Batch contains failed orders");
+                }
                 generationRepository.updateProgress(idempotencyKey, batchIndex + 1);
             }
             generationRepository.markCompleted(idempotencyKey, totalBatches);

@@ -118,18 +118,20 @@ public class OrderGenerationRepository {
                 .update();
     }
 
-    public void markResumed(String idempotencyKey) {
-        jdbcClient
-                .sql(
-                        """
+    public boolean markResumed(String idempotencyKey) {
+        return jdbcClient
+                        .sql(
+                                """
                         UPDATE orders.order_generation
                         SET status = :status,
                             error_message = NULL,
                             last_modified_date = NOW()
-                        WHERE idempotency_key = :key
+                        WHERE idempotency_key = :key AND status = :failedStatus
                         """)
-                .param("status", OrderGeneration.STATUS_IN_PROGRESS)
-                .param("key", idempotencyKey)
-                .update();
+                        .param("status", OrderGeneration.STATUS_IN_PROGRESS)
+                        .param("key", idempotencyKey)
+                        .param("failedStatus", OrderGeneration.STATUS_FAILED)
+                        .update()
+                == 1;
     }
 }
