@@ -1,257 +1,289 @@
 # Retail Store Modulith
 
-A specification-driven migration of the [Spring Boot Microservices Series](https://github.com/rajadilipkolli/spring-boot-microservices-series-v2
-) toward a Spring Modulith architecture.
+A specification-driven migration of the [Spring Boot Microservices Series](https://github.com/rajadilipkolli/spring-boot-microservices-series-v2) to a modular monolith architecture powered by **Spring Modulith**, **Java 25**, and **Spring Boot 4.1.1**.
 
-1. Project Goal
+---
 
-The goal is to evolve the existing retail microservices application into a modular monolith while preserving business behavior, API compatibility, security, and data integrity.
+## Table of Contents
 
-The target business modules are:
+- [Project Overview](#project-overview)
+- [Technology Stack](#technology-stack)
+- [Architecture & Business Modules](#architecture--business-modules)
+- [Module Boundaries & Architecture Rules](#module-boundaries--architecture-rules)
+  - [Dependency Rules](#dependency-rules)
+  - [Schema & Persistence Isolation](#schema--persistence-isolation)
+  - [Transactions, Consistency & Resiliency](#transactions-consistency--resiliency)
+- [Repository Guide & Documentation](#repository-guide--documentation)
+- [Getting Started & Build Commands](#getting-started--build-commands)
+  - [Prerequisites](#prerequisites)
+  - [Key Maven Commands](#key-maven-commands)
+  - [Specification & Architecture Verification](#specification--architecture-verification)
+- [Specification-Driven Development (SDD) Workflow](#specification-driven-development-sdd-workflow)
+- [Migration Phase Discipline](#migration-phase-discipline)
+- [AI Coding Assistant Guide](#ai-coding-assistant-guide)
 
-    Catalog — product information and catalog operations.
-    Inventory — stock availability, reservations, and releases.
-    Payments — payment and customer financial state.
-    Orders — order lifecycle and business workflow orchestration.
+---
 
-The migration is incremental and test-driven. Existing microservices must remain intact until the replacement has been verified and the appropriate retirement approval has been granted.
+## Project Overview
 
-2. Specification-Driven Development
+The objective of this repository is to evolve the existing retail store microservices into an architecturally clean, maintainable, and observable **Spring Modulith** application while strictly preserving:
+- **Business Behavior & Contracts:** All core domain logic, REST API contracts, and validation rules remain intact.
+- **Data Integrity & Schema Isolation:** Dedicated database schemas per module with zero direct cross-schema queries.
+- **Reliability & Idempotency:** Asynchronous communication decoupled through outbox patterns and message queues.
 
-This repository uses specification-driven development (SDD).
+The migration follows **Specification-Driven Development (SDD)** and **Test-Driven Development (TDD)**. Every architectural change and module migration is guided by formal specifications under `spec/`, backed by executable acceptance criteria, and verified continuously via automated unit, integration, and architecture tests.
 
-Specifications define intended behavior and acceptance criteria. Implementation is considered complete only when the applicable criteria have supporting verification evidence.
+---
 
-The workflow is:
+## Technology Stack
 
-Read the repository instructions and applicable specifications.
-Inspect the existing implementation and establish a baseline.
-Translate acceptance criteria into implementation and test tasks.
-Implement the smallest appropriate change using test-driven development.
-Run targeted tests and architecture verification.
-Run broader verification when appropriate.
-Record evidence and update migration progress.
-Review the changes before proceeding to the next phase.
+| Layer / Concern          | Technology                   | Details / Configuration                                          |
+|--------------------------|------------------------------|------------------------------------------------------------------|
+| **Runtime & Language**   | **Java 25**                  | OpenJDK 25 with preview features enabled where needed            |
+| **Framework**            | **Spring Boot 4.1.1**        | WebMVC, Data JPA, Validation, AMQP                               |
+| **Modulith Core**        | **Spring Modulith 2.1.1**    | Module boundaries, arch verification, event publication          |
+| **Database**             | **PostgreSQL 18**            | Schema isolation per domain module, runtime driver `postgresql`  |
+| **Database Migrations**  | **Liquibase**                | XML master changelog with modular changeset includes             |
+| **Messaging & Broker**   | **RabbitMQ 4**               | Correlated publisher confirms, event externalization             |
+| **Transactional Outbox** | **NamaStack Outbox**         | `spring-modulith-starter-namastack` + AMQP externalization       |
+| **ORM Utilities**        | **Hypersistence Utils**      | `hypersistence-utils-hibernate-73` (v3.16.0)                     |
+| **Testing**              | **Testcontainers & JUnit 5** | Testcontainers PostgreSQL, RabbitMQ, Spring Modulith Test        |
+| **Code Formatting**      | **Spotless**                 | `google-java-format` (1.36.1) in **AOSP** style, license checks  |
+| **Test Coverage**        | **JaCoCo**                   | Minimum **80%** complexity coverage threshold enforced on verify |
 
-Do not implement the entire migration in one task.
+---
 
-3. Repository Guide
-   Path	Purpose
-   AGENTS.md	Shared repository instructions for AI coding assistants
-   GEMINI.md	Gemini-specific repository guidance
-   spec/spring-modulith-migration.md	Master migration specification
-   spec/01-modulith-foundation.md	Phase 1: foundation and architecture verification
-   spec/02-catalog-module.md	Phase 2: Catalog
-   spec/03-inventory-module.md	Phase 3: Inventory
-   spec/04-payments-module.md	Phase 4: Payments
-   spec/05-orders-orchestration.md	Phase 5: Orders orchestration
-   spec/06-api-and-deployment.md	Phase 6: API compatibility and deployment
-   spec/07-migration-verification.md	Phase 7: migration verification
-   spec/execution-status.md	Phase progress, blockers, and verification evidence
-   ai/skills/spec-driven-development/SKILL.md	Shared SDD workflow
-   ai/skills/spring-modulith/SKILL.md	Spring Modulith architecture guidance
-   ai/skills/test-driven-development/SKILL.md	Test-driven development workflow
-   ai/skills/migration-verification/SKILL.md	Migration verification workflow
-   architecture/decisions/	Architecture Decision Records (ADRs)
-   tools/verify-specs.py	Specification consistency validator
-   .github/workflows/validate-specs.yml	Automated specification validation in GitHub Actions
-   .github/workflows/maven-verify.yml	Automated Maven build and architecture verification in GitHub Actions
+## Architecture & Business Modules
 
-If a referenced file is missing, report the problem instead of claiming that its instructions were followed.
+The application is structured into clearly separated business, orchestration, and support modules rooted under `com.example.retail`:
 
-4. Prerequisites Before Starting
+```
+com.example.retail
+├── catalog/       # Catalog business module (owns 'catalog' schema)
+├── inventory/     # Inventory business module (owns 'inventory' schema)
+├── orders/        # Orders orchestration module (order lifecycle & sagas)
+├── payments/      # Payments business module (financial accounts & charges)
+├── shared/        # Shared kernel (OPEN module: common DTOs, events, primitives)
+└── ui/            # UI presentation module (controllers, views, and web assets)
+```
 
-Before implementation begins, confirm that:
+### Module Responsibilities
 
-AGENTS.md exists and has been reviewed.
-The master migration specification exists.
-All seven phase specifications exist.
-All four shared skills exist and have valid metadata.
-Required architecture decision records exist.
-spec/execution-status.md accurately records the current state.
-Specification validation passes locally.
-The GitHub Actions specification validation workflow passes.
-The existing Java and Maven build configuration has been inspected.
+- **`catalog` (`com.example.retail.catalog`)**
+  - Manages product master data, descriptions, pricing, and catalog search.
+  - Owns the dedicated `catalog` database schema.
+  - Exposes public APIs for product information retrieval; internal implementation is strictly encapsulated.
 
-Do not begin business-module migration until the foundation phase has been completed and its exit criteria verified.
+- **`inventory` (`com.example.retail.inventory`)**
+  - Manages stock levels, quantity reservations, stock release, and replenishment.
+  - Owns the dedicated `inventory` database schema (`inventory`, `inventory_reservations`).
+  - Implements concurrency control, reservation state transitions, and asynchronous event outbox processing.
 
-5. Validate the Repository
+- **`orders` (`com.example.retail.orders`)**
+  - Orchestrates the order lifecycle and cross-module checkout workflows.
+  - Coordinates reservations with `inventory`, validations with `catalog`, and charges with `payments`.
+  - Implements compensation logic for partial order failures.
 
-Run the specification validator from the repository root:
+- **`payments` (`com.example.retail.payments`)**
+  - Handles customer balances, payment authorizations, capture, and refunds.
+  - Owns financial state and transaction records.
 
-python3 tools/verify-specs.py
+- **`shared` (`com.example.retail.shared`)**
+  - An **`OPEN`** module (`ApplicationModule.Type.OPEN`) accessible by all modules.
+  - Contains shared domain primitives, common integration events (`InventoryProcessedEvent`, etc.), and pagination models (`PagedResult`).
 
+- **`ui` (`com.example.retail.ui`)**
+  - Presentation layer managing web views, controllers, and integration for the retail storefront.
+  - Consumes public APIs across modules.
 
-Check Python syntax separately:
+---
 
-python3 -m py_compile tools/verify-specs.py
+## Module Boundaries & Architecture Rules
 
+Module boundaries are formally enforced by **Spring Modulith** and validated automatically via `ModulithArchitectureTests`.
 
-Inspect the working tree:
+### Dependency Rules
 
-git status --short
+```mermaid
+graph TD
+    UI[ui] --> Catalog[catalog]
+    UI --> Inventory[inventory]
+    UI --> Orders[orders]
+    UI --> Payments[payments]
+    UI --> Shared[shared]
 
+    Orders --> Catalog
+    Orders --> Inventory
+    Orders --> Payments
+    Orders --> Shared
 
-Resolve validation errors before starting implementation. Review warnings and determine whether they represent genuine gaps.
+    Inventory --> Shared
+    Catalog --> Shared
+    Payments --> Shared
+```
 
-The validator checks specification consistency; it does not prove that the Java application builds or that the architecture is correct.
+1. **Intended Dependency Direction:**
+   - **`orders`** may depend on the public APIs of **`catalog`**, **`inventory`**, and **`payments`**.
+   - **`catalog`**, **`inventory`**, and **`payments`** **MUST NOT** depend on `orders`, including its public APIs or internal packages.
+   - **`catalog`** and **`inventory`** maintain strict independence (except explicitly permitted read-only catalog lookups where specified).
+   - **`shared`** is an open contract module and must never depend on any business module.
+2. **Encapsulation & Public APIs:**
+   - Only classes in the module's root package (or explicitly documented public API packages) are accessible externally.
+   - Packages named `internal/**` are strictly private to each module.
+   - Cross-module communication must use immutable DTOs or application events.
+   - Direct JPA entity or repository sharing between modules is strictly prohibited.
+3. **No Circular Dependencies:**
+   - Cyclic package and module relationships are forbidden and fail architectural verification during the build.
 
-6. Start Phase 1
+### Schema & Persistence Isolation
 
-The first implementation task is Phase 1: Modulith Foundation.
+- **Independent Schemas:** PostgreSQL database isolation is enforced using separate database schemas for each module:
+  - `catalog` schema for product catalog entities.
+  - `inventory` schema for inventory items and reservations.
+  - Additional schemas for orders and payments as phases progress.
+- **No Cross-Schema Queries or Joins:** A module must never query another module's tables directly.
+- **Liquibase Migrations:** Managed per module in `src/main/resources/db/changelog/{module}/` and referenced cleanly in `db.changelog-master.xml`.
 
-Read these files before asking an AI assistant to implement anything:
+### Transactions, Consistency & Resiliency
 
-AGENTS.md
-spec/spring-modulith-migration.md
-spec/01-modulith-foundation.md
-ai/skills/spec-driven-development/SKILL.md
-ai/skills/spring-modulith/SKILL.md
-Relevant architecture decision records.
+- **Atomic Module Transactions:** Local database transactions (`@Transactional`) are scoped strictly to a single module's boundary.
+- **Asynchronous & Cross-Module Consistency:** Cross-boundary interactions rely on the **Transactional Outbox Pattern** (`spring-modulith-starter-namastack`) and **RabbitMQ** to publish application events durably.
+- **Explicit Failure Compensation:** Distributed business processes (such as order checkout) must handle failures via explicit, idempotent compensation steps. A local database rollback cannot reverse an external payment or third-party side effect.
 
-Read the TDD and migration-verification skills when their workflows apply.
+---
 
-Phase 1 objectives
+## Repository Guide & Documentation
 
-The foundation phase must:
+| Path | Purpose |
+|---|---|
+| [`AGENTS.md`](file:///c:/tools/git/retail-store-modulith/AGENTS.md) | Shared engineering rules and constraints for all AI coding assistants |
+| [`GEMINI.md`](file:///c:/tools/git/retail-store-modulith/GEMINI.md) | Gemini CLI instructions and SDD compliance rules |
+| [`spec/spring-modulith-migration.md`](file:///c:/tools/git/retail-store-modulith/spec/spring-modulith-migration.md) | Master migration specification and architectural blueprint |
+| [`spec/execution-status.md`](file:///c:/tools/git/retail-store-modulith/spec/execution-status.md) | Phase status tracking, blockers, and verification evidence |
+| [`spec/01-modulith-foundation.md`](file:///c:/tools/git/retail-store-modulith/spec/01-modulith-foundation.md) | Phase 1: Modulith Foundation & architecture verification |
+| [`spec/02-catalog-module.md`](file:///c:/tools/git/retail-store-modulith/spec/02-catalog-module.md) | Phase 2: Catalog Module migration |
+| [`spec/03-inventory-module.md`](file:///c:/tools/git/retail-store-modulith/spec/03-inventory-module.md) | Phase 3: Inventory Module migration |
+| [`spec/04-payments-module.md`](file:///c:/tools/git/retail-store-modulith/spec/04-payments-module.md) | Phase 4: Payments Module migration |
+| [`spec/05-orders-orchestration.md`](file:///c:/tools/git/retail-store-modulith/spec/05-orders-orchestration.md) | Phase 5: Orders Orchestration & checkout workflow |
+| [`spec/06-api-and-deployment.md`](file:///c:/tools/git/retail-store-modulith/spec/06-api-and-deployment.md) | Phase 6: API Compatibility, security, and deployment assets |
+| [`spec/07-migration-verification.md`](file:///c:/tools/git/retail-store-modulith/spec/07-migration-verification.md) | Phase 7: Cutover readiness, parity testing, and verification |
+| [`ai/skills/`](file:///c:/tools/git/retail-store-modulith/ai/skills/) | Reusable SDD, Spring Modulith, TDD, and verification skills |
+| [`architecture/decisions/`](file:///c:/tools/git/retail-store-modulith/architecture/decisions/) | Architecture Decision Records (ADRs) |
+| [`tools/verify-specs.py`](file:///c:/tools/git/retail-store-modulith/tools/verify-specs.py) | Python validator for specification consistency and link integrity |
 
-Inspect the current repository, Maven configuration, Java version, and Spring Boot version.
-Record existing build and test results, including pre-existing failures.
-Establish a new Spring Boot application entry point using compatible dependencies.
-Define the Catalog, Inventory, Orders, and Payments module boundaries.
-Add Spring Modulith architecture verification.
-Verify the intended module dependency rules and detect cycles.
-Preserve the existing microservices and business functionality.
-Document build instructions, compatibility decisions, and outstanding risks.
+---
 
-Phase 1 must not migrate business logic. Catalog, Inventory, Payments, and Orders business migration belongs to the subsequent phases.
+## Getting Started & Build Commands
 
-Refer to spec/01-modulith-foundation.md for the complete requirements and exit criteria.
+### Prerequisites
 
-7. Prompt for Your AI Coding Assistant
+- **Java Development Kit (JDK):** Version 25 or higher
+- **Container Runtime:** Docker Desktop, Rancher Desktop, or Podman (required for Testcontainers integration tests)
+- **Python:** Python 3.10+ (for `verify-specs.py`)
 
-Use this prompt with Claude Code, Gemini CLI, GitHub Copilot, or another coding assistant that can inspect and modify the repository.
+### Key Maven Commands
 
-We are using specification-driven development (SDD)
-to migrate this retail application toward Spring Modulith.
+The project includes the Maven wrapper (`./mvnw` or `mvnw.cmd` on Windows):
+
+- **Compile and verify code formatting:**
+  ```bash
+  ./mvnw compile
+  ```
+
+- **Run unit tests:**
+  ```bash
+  ./mvnw test
+  ```
+
+- **Run Spring Modulith architecture verification tests:**
+  ```bash
+  ./mvnw test -Dtest=ModulithArchitectureTests
+  ```
+
+- **Run integration tests (failsafe):**
+  ```bash
+  ./mvnw integration-test
+  ```
+
+- **Run complete build verification (tests, integration tests, JaCoCo, Spotless):**
+  ```bash
+  ./mvnw verify
+  ```
+
+- **Check code formatting with Spotless:**
+  ```bash
+  ./mvnw spotless:check
+  ```
+
+- **Apply code formatting automatically (AOSP style + license header):**
+  ```bash
+  ./mvnw spotless:apply
+  ```
+
+### Specification & Architecture Verification
+
+Always validate specifications and architecture definitions before and after changes:
+
+```bash
+# Validate specification references, skills, and ADR metadata
+python tools/verify-specs.py
+
+# Check Python syntax for validator
+python -m py_compile tools/verify-specs.py
+```
+
+---
+
+## Specification-Driven Development (SDD) Workflow
+
+All development in this repository strictly adheres to SDD:
+
+1. **Review Specification:** Identify the active migration phase in `spec/` and review all prerequisite criteria.
+2. **Translate to Tasks:** Break acceptance criteria into targeted implementation and test tasks.
+3. **Test-First Implementation (TDD):**
+   - **Red:** Write failing tests reflecting acceptance criteria.
+   - **Green:** Implement the minimum code required to pass.
+   - **Refactor:** Clean code while preserving behavior and running Spotless.
+4. **Architectural Verification:** Run `ModulithArchitectureTests` to verify boundary compliance.
+5. **Record Evidence:** Record test runs and verification results in [`spec/execution-status.md`](file:///c:/tools/git/retail-store-modulith/spec/execution-status.md).
+
+---
+
+## Migration Phase Discipline
+
+| Phase | Module / Focus | Status | Specification |
+|:---:|---|:---:|---|
+| **1** | Modulith Foundation & Architecture Verification | `COMPLETE` | [`spec/01-modulith-foundation.md`](file:///c:/tools/git/retail-store-modulith/spec/01-modulith-foundation.md) |
+| **2** | Catalog Module | `COMPLETE` | [`spec/02-catalog-module.md`](file:///c:/tools/git/retail-store-modulith/spec/02-catalog-module.md) |
+| **3** | Inventory Module | `IN_PROGRESS` | [`spec/03-inventory-module.md`](file:///c:/tools/git/retail-store-modulith/spec/03-inventory-module.md) |
+| **4** | Payments Module | `NOT_STARTED` | [`spec/04-payments-module.md`](file:///c:/tools/git/retail-store-modulith/spec/04-payments-module.md) |
+| **5** | Orders Orchestration & Checkout | `NOT_STARTED` | [`spec/05-orders-orchestration.md`](file:///c:/tools/git/retail-store-modulith/spec/05-orders-orchestration.md) |
+| **6** | API Compatibility & Deployment | `NOT_STARTED` | [`spec/06-api-and-deployment.md`](file:///c:/tools/git/retail-store-modulith/spec/06-api-and-deployment.md) |
+| **7** | Migration Verification & Cutover Readiness | `NOT_STARTED` | [`spec/07-migration-verification.md`](file:///c:/tools/git/retail-store-modulith/spec/07-migration-verification.md) |
+
+> [!IMPORTANT]
+> Do not retire legacy microservices or delete deployment assets until Phase 7 verification is complete and explicit stakeholder approval is recorded.
+
+---
+
+## AI Coding Assistant Guide
+
+When working with an AI coding assistant (Gemini CLI, Claude Code, GitHub Copilot), use this standard kick-off prompt:
+
+```text
+We are using Specification-Driven Development (SDD) to migrate this retail application toward Spring Modulith.
 
 Before changing any files:
-
-1. Read AGENTS.md.
+1. Read AGENTS.md and GEMINI.md.
 2. Read spec/spring-modulith-migration.md.
-3. Read spec/01-modulith-foundation.md.
-4. Read ai/skills/spec-driven-development/SKILL.md.
-5. Read ai/skills/spring-modulith/SKILL.md.
-6. Read the relevant architecture decision records.
-7. Inspect the current working tree, source code, Maven
-   configuration, tests, and database migrations.
+3. Read the applicable phase specification in spec/.
+4. Read ai/skills/spec-driven-development/SKILL.md and ai/skills/spring-modulith/SKILL.md.
+5. Inspect the current working tree, source code, Maven configuration, tests, and database changelogs.
 
-First perform a repository assessment. Do not start
-implementation until you have reported the findings.
-
-Establish the current Java and Spring Boot versions,
-application entry points, dependency-management approach,
-persistence configuration, and existing build/test baseline.
-
-Identify any conflicts between the current implementation
-and the Phase 1 specification.
-
-Then produce a Phase 1 implementation plan mapped to
-specific acceptance criteria and tests.
-
-Implement Phase 1 only after the assessment and plan.
-Use test-driven development where practical.
-
-Do not migrate Catalog, Inventory, Payments, or Orders
-business logic during Phase 1.
-
-Do not remove existing microservices, modify unrelated
-functionality, or perform production cutover.
-
-Run the relevant tests and Spring Modulith architecture
-verification. Report actual command results and map each
-acceptance criterion to evidence.
-
-Do not mark Phase 1 complete until all mandatory exit
-criteria have been verified and required approval recorded.
-
-8. Test-Driven Development
-
-For behavior changes, use the following cycle:
-
-Red: Write a test and confirm that it fails for the intended reason.
-Green: Implement the minimum behavior needed to pass.
-Refactor: Improve the implementation while preserving behavior.
-Verify: Run the relevant tests and architecture checks.
-
-Do not create artificial failures when behavior is already implemented correctly. Extend existing tests where coverage is missing.
-
-For full Maven verification, inspect the repository's build structure and use the appropriate Maven wrapper command. If the root project supports it, the standard command is:
-
-./mvnw clean verify
-
-
-Record baseline failures separately from failures introduced by the current change.
-
-9. Migration Phase Tracking
-
-Use spec/execution-status.md to record progress.
-
-Allowed phase statuses:
-
-NOT_STARTED — work has not begun.
-IN_PROGRESS — implementation or verification is underway.
-BLOCKED — an unresolved issue prevents progress.
-COMPLETE — mandatory acceptance criteria and exit criteria are verified and required approval is recorded.
-
-A passing build alone does not make a phase complete.
-
-Record the commands executed, actual results, outstanding blockers, implementation PR or commit, and required reviewer approval.
-
-10. Architecture Decision Records
-
-Significant architectural decisions belong in architecture/decisions/.
-
-Before changing an accepted decision:
-
-Read the existing ADR.
-Explain the reason for the proposed change.
-Assess the impact on business behavior, compatibility, reliability, and data integrity.
-Create a new ADR when necessary.
-Obtain the required approval.
-
-ADRs marked Proposed are not approved architectural requirements. Implementation status and ADR approval status must be tracked separately.
-
-11. Definition of Done
-
-A task is complete only when:
-
-The applicable specification and acceptance criteria are identified.
-The required implementation and tests are complete.
-Relevant architecture checks have been executed.
-The actual verification results are recorded.
-Remaining risks and unverified criteria are disclosed.
-The final diff has been reviewed.
-Migration progress is updated when applicable.
-
-Never report a test as passing unless it was actually executed and its result was observed.
-
-12. Safety and Migration Boundaries
-    Preserve existing business behavior unless a change is explicitly approved.
-    Do not expose repositories, JPA entities, or internal implementation packages across module boundaries.
-    Do not assume multiple business operations are atomic because they run in one Spring Boot process.
-    Do not claim a local database rollback reverses an external payment.
-    Do not modify already-applied database changesets destructively.
-    Do not remove production integrations or retire existing microservices before migration verification and explicit approval.
-13. Recommended Starting Point
-
-Once all prerequisites and CI checks pass:
-
-Start with spec/01-modulith-foundation.md.
-Complete the repository assessment.
-Record baseline build and test results.
-Review the Phase 1 implementation plan.
-Implement and verify the foundation.
-Obtain review before moving to Phase 2.
-
-The objective is a verified, buildable modular foundation—not a premature migration of all business functionality.
+Workflow rules:
+- Respect module boundaries and allowedDependencies defined in package-info.java files.
+- Ensure schema isolation (catalog, inventory, orders, payments schemas).
+- Implement changes using test-driven development.
+- Run ModulithArchitectureTests and verify code formatting with Spotless.
+- Update spec/execution-status.md with test evidence and results.
+```

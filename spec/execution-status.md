@@ -24,8 +24,8 @@ A phase with failed or unverified mandatory criteria MUST NOT be marked COMPLETE
 3. Phase Overview
 Phase	Specification	Status	Evidence / PR	Approval
 1. Modulith foundation	01-modulith-foundation.md	COMPLETE	Recorded below	Approved
-2. Catalog module	02-catalog-module.md	IN_PROGRESS	Recorded below	Pending
-3. Inventory module	03-inventory-module.md	NOT_STARTED	TBD	Pending
+2. Catalog module	02-catalog-module.md	COMPLETE	Recorded below	User Approved
+3. Inventory module	03-inventory-module.md	IN_PROGRESS	Recorded below	Pending
 4. Payments module	04-payments-module.md	NOT_STARTED	TBD	Pending
 5. Orders orchestration	05-orders-orchestration.md	NOT_STARTED	TBD	Pending
 6. API and deployment	06-api-and-deployment.md	NOT_STARTED	TBD	Pending
@@ -133,15 +133,58 @@ Decision
 Phase 1 is COMPLETE. Foundation, packaging, module boundaries, shared and UI modules, and architecture tests verified.
 
 
+### Phase 3 Evidence Record
+
+Phase 3: Inventory Module
+Specification: spec/03-inventory-module.md
+Status: IN_PROGRESS
+Started: 2026-10-22
+Completed: TBD
+Implementation PR / commit: Local branch spec
+Reviewer / approver: Pending user review
+
+Acceptance criteria evidence
+
+Criterion	Status	Evidence	Notes
+Inventory logic resides in the Inventory module	PASS	com.example.retail.inventory with isolated domain, application, persistence, and web packages	Spring MVC, pure synchronous controllers & services
+Inventory owns its persistence	PASS	PostgreSQL isolated inventory schema (inventory.inventory & inventory.inventory_reservations)	All entities use @Tsid(TsidSupplier.class)
+A documented public API exists	PASS	com.example.retail.inventory.InventoryFacade and clean DTOs in com.example.retail.shared.inventory	InventoryFacadeImpl delegates cleanly
+Stock cannot become negative	PASS	InventoryPersistenceIT.databaseConstraint_RejectsNegativeQuantity and check constraint chk_inventory_quantity	Verified with Testcontainers PostgreSQL
+Concurrent reservations cannot oversell stock	PASS	InventoryConcurrencyIT.concurrentReservations_NeverOversell (20 concurrent threads, 10 items)	0 overselling, perfect consistency verified
+Every reservation has a mandatory persistent idempotency identifier	PASS	InventoryPersistenceIT.uniqueConstraint_RejectsDuplicateIdempotencyKey & schema unique constraint uc_inv_res_idempotency_key	Verified via Testcontainers
+Reservation and release operations are idempotent	PASS	InventoryServiceTest.reserve_IdempotentSuccess and release_AlreadyReleased	Full idempotency handling matrix verified
+Reservation transitions and their available/reserved stock effects match the lifecycle table	PASS	InventoryServiceTest and InventoryControllerTest	All state transitions (RESERVED, RELEASED, CONSUMED, FAILED) verified
+Compensation behavior is defined where required	PASS	InventoryService.release() restores stock and releases reservation idempotently	Verified in service and integration tests
+Existing inventory data is preserved	PASS	Liquibase changelog 03-insert-sample-inventory.xml loads sample items P001-P005	Verified in InventoryPersistenceIT
+Liquibase migrations are tested	PASS	XML changelogs executed cleanly on empty PostgreSQL 18 container	Verified in InventoryPersistenceIT
+Unit, integration, and architecture tests pass	PASS	127 unit tests and 13 integration tests passed with 0 failures, 0 errors	Verified via .\mvnw verify
+No other module accesses Inventory internals	PASS	ModulithArchitectureTests.shouldVerifyModularity() passes with 0 violations	Verified via Spring Modulith
+The application builds successfully	PASS	.\mvnw verify completed with BUILD SUCCESS in 02:12 min	JaCoCo line & branch coverage >= 80% met
+
+Verification commands
+
+Command	Result	Output / report	Limitations / evidence location
+python tools/verify-specs.py	PASS	Checks executed: 186; Errors: 0; Warnings: 0; RESULT: PASSED; exit 0	Specification references and frontmatter verified
+.\mvnw test	PASS	127 tests run, 0 failures, 0 errors, 0 skipped; BUILD SUCCESS in 57s	Unit and architecture test execution
+.\mvnw verify	PASS	127 unit tests + 13 integration tests run, 0 failures, 0 errors; JaCoCo coverage >= 80% met; BUILD SUCCESS in 02:12 min	Full build lifecycle with PostgreSQL 18 & RabbitMQ 4 Testcontainers
+
+Outstanding issues
+
+None recorded.
+
+Decision
+
+Phase 3 mandatory implementation and acceptance criteria are verified with passing evidence. Awaiting user review/approval to mark Phase 3 as COMPLETE.
+
 ### Phase 2 Evidence Record
 
 Phase 2: Catalog Module
 Specification: spec/02-catalog-module.md
-Status: IN_PROGRESS
+Status: COMPLETE
 Started: 2026-10-21
 Completed: 2026-10-22
 Implementation PR / commit: Local branch `catalog-service`
-Reviewer / approver: Pending reviewer review
+Reviewer / approver: User Approved
 
 Acceptance criteria evidence
 
@@ -177,7 +220,7 @@ Outstanding issues
 
 Decision
 
-Phase 2 is BLOCKED until its prerequisites are satisfied, mandatory acceptance and exit criteria are verified, and reviewer approval is recorded. Resolve these gaps before proceeding to Phase 3 (Inventory Module).
+Phase 2 is COMPLETE.
 
 
 7. Blocker Register

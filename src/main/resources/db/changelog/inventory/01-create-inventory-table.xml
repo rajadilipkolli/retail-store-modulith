@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="createTable-inventory" author="rajakolli">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="inventory" tableName="inventory"/>
+            </not>
+        </preConditions>
+        <createTable schemaName="inventory" tableName="inventory">
+            <column name="id" type="BIGINT">
+                <constraints primaryKey="true" primaryKeyName="pk_inventory" nullable="false"/>
+            </column>
+            <column name="product_code" type="VARCHAR(255)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uc_inventory_product_code"/>
+            </column>
+            <column name="quantity" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reserved_items" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="SMALLINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="add-inventory-check-constraints" author="rajakolli">
+        <sql>
+            ALTER TABLE inventory.inventory ADD CONSTRAINT chk_inventory_quantity CHECK (quantity >= 0);
+            ALTER TABLE inventory.inventory ADD CONSTRAINT chk_inventory_reserved_items CHECK (reserved_items >= 0);
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>
